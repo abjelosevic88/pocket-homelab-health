@@ -1,0 +1,23 @@
+[Unit]
+Description=Pocket Health — your health data at home
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pocket-health
+Group=pocket-health
+ExecStart=/usr/local/bin/pocket-health
+Environment=DATA_DIR=/var/lib/pocket-health
+Environment=PORT=8080
+Environment=BASE_URL=https://health.example.com
+Environment=SECURE_COOKIES=true
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/pocket-health
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

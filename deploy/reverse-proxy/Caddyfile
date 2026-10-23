@@ -1,0 +1,9 @@
+# Pocket Health behind Caddy. Apple Health exports are uploaded through the
+# proxy, so allow large bodies; the phone's pushes and Homepage widgets send
+# their own bearer token to /api/*.
+health.example.com {
+	request_body {
+		max_size 4GB
+	}
+	reverse_proxy pocket-health:8080
+}
