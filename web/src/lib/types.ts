@@ -13,6 +13,8 @@ export interface Settings {
   notify_hour: number; weekly_day: number; notify_configured: boolean
   habits_mode: ConnMode; habits_via: ConnVia; habits_detail: string; habits_open_url: string
   habits_url: string; habits_token: string; habits_public_url: string
+  movement_mode: ConnMode; movement_via: ConnVia; movement_detail: string; movement_open_url: string
+  movement_url: string; movement_token: string; movement_public_url: string
   ai_provider: 'auto' | 'pocket' | 'openai'; ai_pocket_model: string; openai_api_key: string; openai_model: string; openai_base_url: string
   weather_enabled: boolean; weather_lat: number; weather_lon: number; weather_place: string; weather_last: string
   prefer_device: string
@@ -95,3 +97,5 @@ export const WEEKDAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fr
 export const RANGES: { id: string; label: string }[] = [{ id: 'w', label: '7 days' }, { id: 'm', label: '30 days' }, { id: '3m', label: '3 months' }, { id: '6m', label: '6 months' }, { id: 'y', label: 'Year' }, { id: 'all', label: 'All' }]
 
 export function cap(s: string): string { return s ? s[0].toUpperCase() + s.slice(1) : '' }
+
+export interface Route { connected: boolean; via?: string; detail?: string; points: [number, number][]; n: number; distance_m: number; bounds?: [number, number][]; start: string; end: string; fetched_at: string; open_url?: string }

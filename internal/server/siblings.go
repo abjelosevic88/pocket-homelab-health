@@ -14,7 +14,7 @@ import (
 	"github.com/abjelosevic88/pocket-homelab-health/internal/store"
 )
 
-// ---- Pocket Habits ----
+// ---- Pocket Habits and Pocket Movement ----
 //
 // Each person chooses how Health reaches it: through a Pocket Core app link
 // (Health asks Core for a five-minute token acting as that person, nothing
@@ -23,8 +23,9 @@ import (
 // never kept, so a link switched off in Core applies at once.
 
 const (
-	scopeHabitsRead   = "habits:read"
-	scopeEntriesWrite = "entries:write"
+	scopeHabitsRead     = "habits:read"
+	scopeEntriesWrite   = "entries:write"
+	scopeMovementPoints = "movement:points"
 )
 
 // pocketApp is one sibling Pocket app Health acts in.
@@ -35,8 +36,9 @@ type pocketApp struct {
 }
 
 var (
-	appHabits  = pocketApp{"habits", "Pocket Habits", []string{scopeHabitsRead, scopeEntriesWrite}, "A workout or a met goal ticks a habit (\"Gym\", \"10k steps\")"}
-	pocketApps = []pocketApp{appHabits}
+	appHabits   = pocketApp{"habits", "Pocket Habits", []string{scopeHabitsRead, scopeEntriesWrite}, "A workout or a met goal ticks a habit (\"Gym\", \"10k steps\")"}
+	appMovement = pocketApp{"movement", "Pocket Movement", []string{scopeMovementPoints}, "Draw a workout's route from the positions recorded while it ran"}
+	pocketApps  = []pocketApp{appHabits, appMovement}
 )
 
 func appBySlug(slug string) (pocketApp, bool) {
@@ -119,6 +121,8 @@ func connSettings(st store.Settings, a pocketApp) (mode, url, token, public stri
 	switch a.slug {
 	case "habits":
 		return st.HabitsMode, st.HabitsURL, st.HabitsToken, st.HabitsPublicURL
+	case "movement":
+		return st.MovementMode, st.MovementURL, st.MovementToken, st.MovementPublicURL
 	}
 	return "", "", "", ""
 }

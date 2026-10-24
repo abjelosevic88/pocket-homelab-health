@@ -45,6 +45,7 @@ func (s *Server) publicSettings(ctx context.Context, u *store.User, st store.Set
 		"notify_url": st.NotifyURL, "notify_format": st.NotifyFormat, "notify_goals": st.NotifyGoals, "notify_weekly": st.NotifyWeekly,
 		"notify_meds": st.NotifyMeds, "notify_inactive": st.NotifyInactive, "notify_hour": st.NotifyHour, "weekly_day": st.WeeklyDay, "notify_configured": st.NotifyURL != "",
 		"habits_url": st.HabitsURL, "habits_token": mask(st.HabitsToken), "habits_public_url": st.HabitsPublicURL,
+		"movement_url": st.MovementURL, "movement_token": mask(st.MovementToken), "movement_public_url": st.MovementPublicURL,
 		"ai_provider": st.AIProvider, "ai_pocket_model": st.AIPocketModel, "openai_api_key": mask(st.OpenAIKey), "openai_model": st.OpenAIModel, "openai_base_url": st.OpenAIBaseURL,
 		"weather_enabled": st.WeatherEnabled, "weather_lat": st.WeatherLat, "weather_lon": st.WeatherLon, "weather_place": st.WeatherPlace, "weather_last": st.WeatherLast,
 		"prefer_device":    st.PreferDevice,
@@ -169,6 +170,9 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	url("habits_url", &cur.HabitsURL, in.HabitsURL)
 	secret("habits_token", &cur.HabitsToken, in.HabitsToken)
 	url("habits_public_url", &cur.HabitsPublicURL, in.HabitsPublicURL)
+	url("movement_url", &cur.MovementURL, in.MovementURL)
+	secret("movement_token", &cur.MovementToken, in.MovementToken)
+	url("movement_public_url", &cur.MovementPublicURL, in.MovementPublicURL)
 	if keys["ai_provider"] {
 		if !validAIProvider(in.AIProvider) {
 			writeErr(w, http.StatusBadRequest, "AI is automatic, Pocket AI or OpenAI")
@@ -204,6 +208,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	mode("habits_mode", &cur.HabitsMode, in.HabitsMode)
+	mode("movement_mode", &cur.MovementMode, in.MovementMode)
 	if err := s.store.SaveUserSettings(r.Context(), me.ID, cur); err != nil {
 		s.fail(w, err, "save settings")
 		return
@@ -282,9 +287,16 @@ func (s *Server) handleIntegrationTest(w http.ResponseWriter, r *http.Request) {
 			}
 			var v string
 			if v, err = conn.client.Health(ctx); err == nil {
-				var hs []pocket.Habit
-				hs, err = conn.client.Habits(ctx)
-				msg = fmt.Sprintf("Pocket Habits %s, %s, %d habits", v, how, len(hs))
+				switch a.slug {
+				case "habits":
+					var hs []pocket.Habit
+					hs, err = conn.client.Habits(ctx)
+					msg = fmt.Sprintf("Pocket Habits %s, %s, %d habits", v, how, len(hs))
+				case "movement":
+					var pts []pocket.Point
+					pts, err = conn.client.Points(ctx, time.Now().Add(-24*time.Hour), time.Now(), 2000)
+					msg = fmt.Sprintf("Pocket Movement %s, %s, %d positions in the last 24 h", v, how, len(pts))
+				}
 			}
 		}
 	} else if in.Which == "openai" {

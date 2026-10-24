@@ -133,6 +133,8 @@ func (s *Server) ownerReady(ctx context.Context, owner int64) error {
 	set("NotifyURL", &st.NotifyURL, s.cfg.NotifyURL)
 	set("HabitsURL", &st.HabitsURL, s.cfg.HabitsURL)
 	set("HabitsToken", &st.HabitsToken, s.cfg.HabitsToken)
+	set("MovementURL", &st.MovementURL, s.cfg.MovementURL)
+	set("MovementToken", &st.MovementToken, s.cfg.MovementToken)
 	set("OpenAIKey", &st.OpenAIKey, s.cfg.OpenAIKey)
 	set("OpenAIModel", &st.OpenAIModel, s.cfg.OpenAIModel)
 	set("OpenAIBaseURL", &st.OpenAIBaseURL, s.cfg.OpenAIBaseURL)

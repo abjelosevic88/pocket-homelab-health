@@ -230,6 +230,11 @@ type Settings struct {
 	HabitsToken     string `json:"habits_token"`
 	HabitsPublicURL string `json:"habits_public_url"`
 
+	MovementMode      string `json:"movement_mode"`
+	MovementURL       string `json:"movement_url"`
+	MovementToken     string `json:"movement_token"`
+	MovementPublicURL string `json:"movement_public_url"`
+
 	// AI for the weekly recap and questions: Pocket AI through Core, or an
 	// OpenAI-compatible API with the person's own key.
 	AIProvider    string `json:"ai_provider"` // auto | pocket | openai

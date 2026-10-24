@@ -19,7 +19,7 @@ func (s *Store) defaults() Settings {
 		units = "metric"
 	}
 	return Settings{Title: DefaultTitle, Units: units, DateFormat: "auto", TimeFormat: "auto", WeekStart: 1,
-		HomeMetrics: []string{"steps", "active_energy", "exercise_min", "sleep_asleep", "resting_hr", "weight", "hrv", "water"},
+		HomeMetrics:  []string{"steps", "active_energy", "exercise_min", "sleep_asleep", "resting_hr", "weight", "hrv", "water"},
 		NotifyFormat: "apprise", NotifyGoals: true, NotifyWeekly: true, NotifyMeds: true, NotifyHour: 8, WeeklyDay: 1,
 		AIProvider: "auto"}
 }

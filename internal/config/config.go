@@ -55,6 +55,8 @@ type Config struct {
 	NotifyFormat  string // apprise | ntfy | json
 	HabitsURL     string
 	HabitsToken   string
+	MovementURL   string
+	MovementToken string
 	OpenAIKey     string
 	OpenAIModel   string
 	OpenAIBaseURL string
@@ -153,6 +155,8 @@ func Load() (*Config, error) {
 		NotifyFormat:  strings.ToLower(env("NOTIFY_FORMAT", "")),
 		HabitsURL:     strings.TrimRight(env("HABITS_URL", ""), "/"),
 		HabitsToken:   env("HABITS_TOKEN", ""),
+		MovementURL:   strings.TrimRight(env("MOVEMENT_URL", ""), "/"),
+		MovementToken: env("MOVEMENT_TOKEN", ""),
 		OpenAIKey:     env("OPENAI_API_KEY", ""),
 		OpenAIModel:   env("OPENAI_MODEL", ""),
 		OpenAIBaseURL: strings.TrimRight(env("OPENAI_BASE_URL", ""), "/"),

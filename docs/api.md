@@ -28,7 +28,7 @@ Returns `{"samples": n, "workouts": n, "sleep": n, "skipped": n, "unknown": [...
 
 ### `POST /workouts`, `POST /sleep`
 
-Same fields as above, one at a time. `PUT/DELETE /workouts/{id}`, `POST /workouts/{id}/habit {"habit_id": n}` ticks a Pocket Habits habit for it, `DELETE /sleep/{id}`.
+Same fields as above, one at a time. `PUT/DELETE /workouts/{id}`, `POST /workouts/{id}/habit {"habit_id": n}` ticks a Pocket Habits habit for it, `GET /workouts/{id}/route[?fresh=1]` is the route recorded by Pocket Movement between start and end (`points`, `distance_m`, `bounds`; cached a day), `POST /workouts/{id}/route/apply` copies that distance onto the workout, `DELETE /sleep/{id}`.
 
 ### Imports
 
@@ -59,4 +59,4 @@ Same fields as above, one at a time. `PUT/DELETE /workouts/{id}`, `POST /workout
 
 ## Pocket Core links
 
-Health offers `health:read` (metrics, summaries, workouts, nights, goals, the day and overlay endpoints) and `health:write` (`POST /ingest`, `POST /samples`, `POST /workouts`; a linked app may change only what it wrote). Health uses Pocket Habits (`habits:read`, `entries:write`) and Pocket AI (`inference:write`).
+Health offers `health:read` (metrics, summaries, workouts, nights, goals, the day and overlay endpoints) and `health:write` (`POST /ingest`, `POST /samples`, `POST /workouts`; a linked app may change only what it wrote). Health uses Pocket Habits (`habits:read`, `entries:write`), Pocket Movement (`movement:points`) and Pocket AI (`inference:write`).

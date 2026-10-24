@@ -87,6 +87,8 @@ func (s *Server) Router() http.Handler {
 			r.Put("/workouts/{id}", s.handleUpdateWorkout)
 			r.Delete("/workouts/{id}", s.handleDeleteWorkout)
 			r.Post("/workouts/{id}/habit", s.handleWorkoutHabit)
+			r.Get("/workouts/{id}/route", s.handleWorkoutRoute)
+			r.Post("/workouts/{id}/route/apply", s.handleWorkoutRouteApply)
 
 			// sleep
 			r.Get("/sleep", s.handleListSleep)

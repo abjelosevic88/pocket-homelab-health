@@ -17,6 +17,8 @@ services:
       # The owner's own connections; everything can also be set under Settings.
       HABITS_URL: ${HABITS_URL:-}
       HABITS_TOKEN: ${HABITS_TOKEN:-}
+      MOVEMENT_URL: ${MOVEMENT_URL:-}
+      MOVEMENT_TOKEN: ${MOVEMENT_TOKEN:-}
       NOTIFY_URL: ${NOTIFY_URL:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # Pocket Core: one sign-in and app links instead of tokens.

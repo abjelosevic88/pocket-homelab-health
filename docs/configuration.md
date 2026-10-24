@@ -19,6 +19,7 @@ Environment variables; every one has a default. Personal settings (units, goals,
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_NAME`, `OIDC_AUTO_CREATE` | – | Sign in with an OpenID Connect provider (not needed with Pocket Core) |
 | `NOTIFY_URL`, `NOTIFY_FORMAT` | – | Apprise (`…/notify/key`), ntfy topic URL or JSON webhook; format `apprise`/`ntfy`/`json` |
 | `HABITS_URL`, `HABITS_TOKEN` | – | Pocket Habits, direct connection (or use Pocket Core) |
+| `MOVEMENT_URL`, `MOVEMENT_TOKEN` | – | Pocket Movement or Dawarich, for workout routes (or use Pocket Core) |
 | `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL` | – | The recap and questions without Pocket AI |
 | `CORE_URL`, `CORE_REGISTRATION_KEY`, `CORE_APP_URL` | – | Pocket Core |
 | `TRUST_PROXY`, `METRICS_ENABLED`, `LOG_LEVEL`, `LOG_FORMAT` | `true`, `true`, `info`, `text` | |

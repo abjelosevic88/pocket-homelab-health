@@ -19,7 +19,7 @@ const TABS: { id: TabId; label: string; icon: string; sub: string }[] = [
   { id: 'general', label: 'General', icon: 'settings', sub: 'Units, your body, the Today tiles, weather and the app title.' },
   { id: 'sources', label: 'Phone & imports', icon: 'smartphone', sub: 'Where the data comes from: your iPhone (the Pocket Homelab app or Health Auto Export), an Apple Health export, CSV, any app.' },
   { id: 'notifications', label: 'Notifications', icon: 'bell', sub: 'Met goals, medication reminders, the weekly report and a nudge when the phone stops syncing.' },
-  { id: 'apps', label: 'Connected apps', icon: 'layers', sub: 'Pocket Habits — through Pocket Core or directly — and the rules that tick habits.' },
+  { id: 'apps', label: 'Connected apps', icon: 'layers', sub: 'Pocket Habits (rules that tick habits) and Pocket Movement (the route of a workout) — through Pocket Core or directly.' },
   { id: 'ai', label: 'AI', icon: 'sparkles', sub: 'Who writes the recap and answers questions: Pocket AI through Core, or your own OpenAI key.' },
   { id: 'profile', label: 'Profile', icon: 'user', sub: 'Your name, email and password.' },
   { id: 'people', label: 'People', icon: 'users', sub: 'Everyone who has an account on this box.' },
@@ -309,6 +309,16 @@ function Integrations() {
           {rules?.map(r => <div key={r.id} className={`rule ${r.enabled ? '' : 'off'}`}><Switch checked={r.enabled} onChange={() => toggleRule(r)} label="Enabled" size="sm" /><span className="grow">{r.trigger === 'workout' ? (r.match === 'any' ? 'Any workout' : `A ${r.match.replace('_', ' ')} workout`) : `${r.match.replace('_', ' ')} goal met`} → <b>{r.habit_name || `habit #${r.habit_id}`}</b></span><button type="button" className="btn ghost sm" onClick={() => setEdit(r)}>Edit</button><button type="button" className="btn ghost sm danger-text" onClick={() => delRule(r)}>Remove</button></div>)}
           {rules && rules.length > 0 && <div className="row"><button type="button" className="btn sm" onClick={markNow}>Tick pending workouts now</button><span className="muted small">Runs every 15 minutes on its own.</span></div>}
         </div>}
+      </Section>
+      <Section title="Pocket Movement — the route of a workout" icon="route" actions={connBadge(eff(f.movement_mode), f.movement_via)}
+        sub="Every workout page shows the positions your phone recorded between its start and end as a route on a map, with the recorded distance (one tap copies it onto a workout the watch did not measure).">
+        <Connection app="Pocket Movement" mode={f.movement_mode} via={f.movement_via} detail={f.movement_detail} core={coreOn} hasToken={!!f.movement_token}
+          onMode={m => save({ movement_mode: m })} onDisconnect={() => save({ movement_url: '', movement_token: '' })}
+          test={<><button type="button" className="btn sm" onClick={() => run('movement', f.movement_url, f.movement_token)}>Test connection</button>{status('movement')}</>}
+          direct={<div className="two-col tight">
+            <Field label="URL" help="Pocket Movement, or a Dawarich instance (same points API)."><input value={f.movement_url} onChange={e => setF({ ...f, movement_url: e.target.value })} placeholder="http://host.docker.internal:8197" /></Field>
+            <Field label="API token" help="Pocket Movement → Settings → API tokens (a Dawarich API key works too)"><input value={f.movement_token} onChange={e => setF({ ...f, movement_token: e.target.value })} autoComplete="off" /></Field>
+          </div>} />
       </Section>
       <Section title="Other Pocket apps" icon="layers" sub="Health offers what it knows to the rest of the box through Pocket Core: Pocket Day reads your day (steps, sleep, workouts, weight…), Pocket Calendar can show workouts and nights, Pocket Kitchen could log water and calories here. Medications and symptoms never leave this app.">
         <dl className="set-dl">

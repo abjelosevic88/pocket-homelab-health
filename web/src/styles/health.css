@@ -221,3 +221,9 @@ a.list-row:hover { background: var(--surface-2); }
 @media (max-width: 767px) {
   .table.trends th:nth-child(3), .table.trends td:nth-child(3), .table.trends th:nth-child(5), .table.trends td:nth-child(5) { display: none; }
 }
+
+/* workout route */
+.route-map { height: 320px; border-radius: 0 0 12px 12px; overflow: hidden; }
+.route-map.leaflet-container { font: inherit; }
+[data-theme="dark"] .route-map .leaflet-tile { filter: brightness(.85) contrast(1.05) saturate(.85); }
+@media (max-width: 767px) { .route-map { height: 240px; } }

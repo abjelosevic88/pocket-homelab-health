@@ -15,6 +15,7 @@ import (
 
 	"github.com/abjelosevic88/pocket-homelab-health/internal/config"
 	"github.com/abjelosevic88/pocket-homelab-health/internal/ingest"
+	"github.com/abjelosevic88/pocket-homelab-health/internal/pocket"
 	"github.com/abjelosevic88/pocket-homelab-health/internal/store"
 )
 
@@ -404,4 +405,16 @@ func TestSettingsPerPerson(t *testing.T) {
 		t.Fatalf("alice settings = %v", al)
 	}
 	_ = time.Now
+}
+
+func TestRouteSimplify(t *testing.T) {
+	// Sarajevo: 1 km east is about 0.0124° of longitude
+	pts := []pocket.Point{{Lat: 43.85, Lng: 18.38, TS: 0}, {Lat: 43.85, Lng: 18.38001, TS: 1}, {Lat: 43.85, Lng: 18.3924, TS: 300}, {Lat: 43.95, Lng: 18.3924, TS: 301}, {Lat: 43.85, Lng: 18.4048, TS: 600}}
+	line, dist := simplify(pts)
+	if len(line) != 3 {
+		t.Fatalf("line = %v (jitter and the jump should be dropped)", line)
+	}
+	if dist < 1900 || dist > 2100 {
+		t.Fatalf("distance = %v, want ~2000 m", dist)
+	}
 }
