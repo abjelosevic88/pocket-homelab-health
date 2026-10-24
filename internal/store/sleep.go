@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 const sleepCols = `id, user_id, start_at, end_at, date, in_bed_s, asleep_s, core_s, deep_s, rem_s, awake_s, source, device, note`
@@ -40,10 +41,17 @@ func (s *Store) UpsertSleep(ctx context.Context, uid int64, in []SleepSession) (
 		var id int64
 		var oldDate string
 		err := s.DB.QueryRowContext(ctx, `SELECT id, date FROM sleep_sessions WHERE user_id = ? AND start_at = ? AND source = ?`, uid, x.StartAt, x.Source).Scan(&id, &oldDate)
+		if err != nil {
+			// The same night sent again with a different start (the watch's first
+			// minutes arrived later) replaces the earlier copy from that source.
+			if oid, od, ok := s.overlappingSleep(ctx, uid, x); ok {
+				id, oldDate, err = oid, od, nil
+			}
+		}
 		if err == nil {
 			dates[oldDate] = true
-			if _, err := s.DB.ExecContext(ctx, `UPDATE sleep_sessions SET end_at = ?, date = ?, in_bed_s = ?, asleep_s = ?, core_s = ?, deep_s = ?, rem_s = ?, awake_s = ?, device = ?, note = CASE WHEN ? <> '' THEN ? ELSE note END WHERE id = ?`,
-				x.EndAt, x.Date, x.InBedS, x.AsleepS, x.CoreS, x.DeepS, x.RemS, x.AwakeS, x.Device, x.Note, x.Note, id); err != nil {
+			if _, err := s.DB.ExecContext(ctx, `UPDATE sleep_sessions SET start_at = ?, end_at = ?, date = ?, in_bed_s = ?, asleep_s = ?, core_s = ?, deep_s = ?, rem_s = ?, awake_s = ?, device = ?, note = CASE WHEN ? <> '' THEN ? ELSE note END WHERE id = ?`,
+				x.StartAt, x.EndAt, x.Date, x.InBedS, x.AsleepS, x.CoreS, x.DeepS, x.RemS, x.AwakeS, x.Device, x.Note, x.Note, id); err != nil {
 				return n, fresh, err
 			}
 			x.ID = id
@@ -65,6 +73,39 @@ func (s *Store) UpsertSleep(ctx context.Context, uid int64, in []SleepSession) (
 		}
 	}
 	return n, fresh, nil
+}
+
+// overlappingSleep finds a session from the same source whose time overlaps
+// x (dates a day either side of x's morning are enough to look at).
+func (s *Store) overlappingSleep(ctx context.Context, uid int64, x *SleepSession) (int64, string, bool) {
+	start, err1 := time.Parse(time.RFC3339, x.StartAt)
+	end, err2 := time.Parse(time.RFC3339, x.EndAt)
+	if err1 != nil || err2 != nil {
+		return 0, "", false
+	}
+	day, err := time.Parse("2006-01-02", x.Date)
+	if err != nil {
+		return 0, "", false
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT id, date, start_at, end_at FROM sleep_sessions WHERE user_id = ? AND source = ? AND date >= ? AND date <= ? ORDER BY id`,
+		uid, x.Source, day.AddDate(0, 0, -1).Format("2006-01-02"), day.AddDate(0, 0, 1).Format("2006-01-02"))
+	if err != nil {
+		return 0, "", false
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var date, sa, ea string
+		if rows.Scan(&id, &date, &sa, &ea) != nil {
+			continue
+		}
+		ps, e1 := time.Parse(time.RFC3339, sa)
+		oe, e2 := time.Parse(time.RFC3339, ea)
+		if e1 == nil && e2 == nil && ps.Before(end) && oe.After(start) {
+			return id, date, true
+		}
+	}
+	return 0, "", false
 }
 
 // rollupSleepDay writes the sleep_* daily rows for a morning. Several

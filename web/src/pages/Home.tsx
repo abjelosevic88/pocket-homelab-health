@@ -47,7 +47,7 @@ export default function Home() {
         </div>
       </div>
 
-      {!data.has_data && <div className="callout info"><Icon name="smartphone" size={15} /><div><b>Nothing here yet.</b> Connect your phone (Health Auto Export, a few taps) or import an Apple Health export under <Link to="/settings/sources">Settings → Phone & imports</Link>, or <button type="button" className="link-btn" onClick={() => openCreate('log')}>log something by hand</button>.</div></div>}
+      {!data.has_data && <div className="callout info"><Icon name="smartphone" size={15} /><div><b>Nothing here yet.</b> Connect your phone (the Pocket Homelab app or Health Auto Export, a few taps) or import an Apple Health export under <Link to="/settings/sources">Settings → Phone & imports</Link>, or <button type="button" className="link-btn" onClick={() => openCreate('log')}>log something by hand</button>.</div></div>}
 
       <div className="tiles">
         {data.tiles.map(t => <TileCard key={t.metric.key} t={t} onClick={() => navigate(`/metrics/${t.metric.key}`)} />)}

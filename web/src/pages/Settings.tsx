@@ -17,7 +17,7 @@ type TabId = 'general' | 'sources' | 'notifications' | 'apps' | 'ai' | 'profile'
 
 const TABS: { id: TabId; label: string; icon: string; sub: string }[] = [
   { id: 'general', label: 'General', icon: 'settings', sub: 'Units, your body, the Today tiles, weather and the app title.' },
-  { id: 'sources', label: 'Phone & imports', icon: 'smartphone', sub: 'Where the data comes from: your iPhone (Health Auto Export), an Apple Health export, CSV, any app.' },
+  { id: 'sources', label: 'Phone & imports', icon: 'smartphone', sub: 'Where the data comes from: your iPhone (the Pocket Homelab app or Health Auto Export), an Apple Health export, CSV, any app.' },
   { id: 'notifications', label: 'Notifications', icon: 'bell', sub: 'Met goals, medication reminders, the weekly report and a nudge when the phone stops syncing.' },
   { id: 'apps', label: 'Connected apps', icon: 'layers', sub: 'Pocket Habits — through Pocket Core or directly — and the rules that tick habits.' },
   { id: 'ai', label: 'AI', icon: 'sparkles', sub: 'Who writes the recap and answers questions: Pocket AI through Core, or your own OpenAI key.' },
@@ -187,7 +187,9 @@ function SourcesTab() {
     const t = setInterval(() => api.get<Import>(`${V1}/imports/${job.id}`).then(j => { setJob(j); if (j.status !== 'running') { reload(); window.dispatchEvent(new CustomEvent('ph:changed')) } }).catch(() => {}), 2000)
     return () => clearInterval(t)
   }, [job, reload])
+  const [appToken, setAppToken] = useState('')
   const mintToken = async () => { try { const r = await api.post<{ token: string }>(`${V1}/tokens`, { name: 'Health Auto Export' }); setToken(r.token) } catch (e) { toast((e as Error).message, 'err') } }
+  const mintAppToken = async () => { try { const r = await api.post<{ token: string }>(`${V1}/tokens`, { name: 'Pocket Homelab' }); setAppToken(r.token) } catch (e) { toast((e as Error).message, 'err') } }
   const uploadApple = async (file: File) => {
     const fd = new FormData(); fd.append('file', file); if (since) fd.append('since', since)
     try {
@@ -206,6 +208,13 @@ function SourcesTab() {
   if (!f) return <Loading />
   return (
     <div className="stack loose">
+      <Section title="iPhone: Pocket Homelab" icon="smartphone" sub="The Pocket Homelab app reads Apple Health on the phone and sends it here: steps, energy and distance per hour (Apple's own count, so phone and watch are not added twice), heart rate per hour with its range, every weight, blood pressure and other reading, workouts and nights with their stages. It sends what is new each time you open it, and in the background when Apple Health has something new.">
+        <ol className="steps">
+          <li>Paired with Pocket Core? Health is already there under <b>Settings → Services</b>; skip to step 3.</li>
+          <li>Otherwise create a token: <button type="button" className="btn sm" onClick={mintAppToken}>Create token</button>{appToken && <div className="set-fresh mt"><div className="row"><Icon name="check-circle" size={16} /><b>Copy it now — shown once.</b></div><pre className="mono">{appToken}</pre></div>} and in the app open <b>Settings → Services → Health</b>: address <CopyField value={base} /> and the token.</li>
+          <li>Open the <b>Health</b> tab in the app, tap <b>Connect Apple Health</b>, allow what you want to share, choose how far back the first sync goes.</li>
+        </ol>
+      </Section>
       <Section title="iPhone: Health Auto Export" icon="smartphone" sub={<>The <a href="https://apps.apple.com/app/health-auto-export-json-csv/id1115567069" target="_blank" rel="noreferrer">Health Auto Export</a> app sends Apple Health to this server on a schedule. Every metric it offers lands here, aggregated as it sends them (an hour or a day per point), plus workouts and sleep stages.</>}>
         <ol className="steps">
           <li>Create a token for the phone: <button type="button" className="btn sm" onClick={mintToken}>Create token</button>{token && <div className="set-fresh mt"><div className="row"><Icon name="check-circle" size={16} /><b>Copy it now — shown once.</b></div><pre className="mono">{token}</pre></div>}</li>
@@ -231,7 +240,7 @@ function SourcesTab() {
       </Section>
       <Section title="Sources seen" icon="database" sub="Where your data came from and when each last wrote. Removing a source deletes everything it sent (undo an import)." >
         {data && Object.keys(data.last_sync).length === 0 && <p className="muted small">Nothing yet.</p>}
-        {data && Object.entries(data.last_sync).map(([src, at]) => <SettingRow key={src} title={src === 'hae' ? 'Health Auto Export' : src === 'apple' ? 'Apple Health export' : src}><span className="row"><span className="muted small">last {ago(at)}</span><button type="button" className="btn ghost sm danger-text" onClick={() => setDelSrc(src)}>Remove</button></span></SettingRow>)}
+        {data && Object.entries(data.last_sync).map(([src, at]) => <SettingRow key={src} title={src === 'hae' ? 'Health Auto Export' : src === 'apple' ? 'Apple Health export' : src === 'pocket-homelab' ? 'Pocket Homelab app' : src}><span className="row"><span className="muted small">last {ago(at)}</span><button type="button" className="btn ghost sm danger-text" onClick={() => setDelSrc(src)}>Remove</button></span></SettingRow>)}
         {data && data.devices.length > 1 && <SettingRow title="Preferred device" help="When two devices count the same day (watch and phone both count steps), this one wins; otherwise the larger total."><Select value={f.prefer_device} onChange={v => save({ prefer_device: v })} options={data.devices.map(d => ({ value: d, label: d }))} placeholder="Largest total" clearLabel="Largest total" /></SettingRow>}
         <div className="row mt"><button type="button" className="btn sm" onClick={async () => { await api.post(`${V1}/rollup`); toast('Days recomputed'); window.dispatchEvent(new CustomEvent('ph:changed')) }} disabled={busy}>Recompute every day</button></div>
       </Section>

@@ -16,6 +16,7 @@ import (
 // and other Pocket apps:
 //
 //	{"samples": [{"metric": "weight", "at": "2025-10-23T07:30:00+02:00", "value": 80.4, "unit": "kg"}],
+//	             (an hour's average may carry "end", "min" and "max")
 //	 "workouts": [{"kind": "running", "start": "…", "end": "…", "distance_m": 5100, "energy_kcal": 320}],
 //	 "sleep": [{"start": "…", "end": "…", "asleep_min": 430, "deep_min": 60}]}
 type Generic struct {
@@ -26,6 +27,8 @@ type Generic struct {
 		End    string   `json:"end"`
 		Value  *float64 `json:"value"`
 		Value2 *float64 `json:"value2"`
+		Min    *float64 `json:"min"`
+		Max    *float64 `json:"max"`
 		Unit   string   `json:"unit"`
 		Device string   `json:"device"`
 		Note   string   `json:"note"`
@@ -103,6 +106,15 @@ func Pocket(raw []byte, source string) (*Batch, error) {
 		if s.Value2 != nil {
 			v2, _ := convert(met, s.Unit, *s.Value2)
 			sm.Value2 = &v2
+		}
+		// An hour's average (the Pocket Homelab app sends heart rate that way) keeps its range.
+		if s.Min != nil {
+			lo, _ := convert(met, s.Unit, *s.Min)
+			sm.ValueMin = &lo
+		}
+		if s.Max != nil {
+			hi, _ := convert(met, s.Unit, *s.Max)
+			sm.ValueMax = &hi
 		}
 		b.Samples = append(b.Samples, sm)
 	}

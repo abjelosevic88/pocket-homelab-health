@@ -20,7 +20,7 @@ Returns `{"samples": n, "workouts": n, "sleep": n, "skipped": n, "unknown": [...
 }
 ```
 
-`metric` is a catalog key (`GET /catalog`), a Health Auto Export name or an `HKQuantityTypeIdentifier…`. `unit` is optional and converted (`lb`, `mi`, `°F`, `mmol/L`, `fl oz`…). `?source=myapp` names the source (default `api`; a link token's app slug when through Pocket Core). Pair metrics (blood pressure) take `value` and `value2`.
+`metric` is a catalog key (`GET /catalog`), a Health Auto Export name or an `HKQuantityTypeIdentifier…`. `unit` is optional and converted (`lb`, `mi`, `°F`, `mmol/L`, `fl oz`…). `?source=myapp` names the source (default `api`; a link token's app slug when through Pocket Core). Pair metrics (blood pressure) take `value` and `value2`. A sample that stands for a stretch of time (an hour's average or sum) may carry `end`, and an average its `min` and `max`. A night sent again from the same source with a different start replaces the earlier copy. The Pocket Homelab app pushes here with `?source=pocket-homelab`.
 
 ### `POST /samples` — one reading
 
