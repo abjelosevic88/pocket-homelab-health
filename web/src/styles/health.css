@@ -127,3 +127,97 @@ a.list-row:hover { background: var(--surface-2); }
 
 .inline-ico { display: inline-flex; align-items: center; gap: 3px; vertical-align: middle; }
 .chart .goal-label { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+
+/* narrow screens: the range picker and filters must never widen the page */
+.content { overflow-x: hidden; }
+.scroll-x { min-width: 0; max-width: 100%; flex: 1 1 auto; }
+.scroll-x .segmented { display: inline-flex; }
+.row.wrap > .select-wrap, .row.wrap > .select { flex: 0 1 220px; min-width: 160px; }
+@media (max-width: 767px) {
+  .row.wrap.filters { flex-direction: column; align-items: stretch; }
+  .row.wrap.filters > * { width: 100%; max-width: 100%; }
+  .bars { gap: 3px; }
+  .bars-val { font-size: 9.5px; }
+  .bars-lbl { font-size: 9.5px; }
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+
+/* ---------- recovered from the shared Pocket skeleton: Select, connection blocks, check rows ---------- */
+.check-row { display: flex; align-items: center; gap: 9px; font-size: 13.5px; cursor: pointer; }
+.check-row input { margin: 0; }
+/* tables */
+.table.compact th, .table.compact td { padding: 7px 8px; }
+.table.compact th { text-transform: none; letter-spacing: 0; font-size: 12.5px; color: var(--text-2); vertical-align: top; }
+.toolbar .sel { width: auto; min-width: 160px; flex: 0 1 auto; }
+/* searchable select — the calendar's select */
+.sel { position: relative; width: 100%; min-width: 0; }
+.sel-btn { width: 100%; display: flex; align-items: center; gap: 8px; font: inherit; font-size: 14px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0 32px 0 10px; height: 36px; text-align: left; cursor: pointer; position: relative; transition: border-color .12s, box-shadow .12s; }
+.sel-btn.empty .sel-val { color: var(--faint); }
+/* the empty-state block (.empty) must not restyle an empty select */
+.sel-btn.empty { flex-direction: row; align-items: center; text-align: left; padding: 0 32px 0 10px; color: var(--text); gap: 8px; }
+.sel-btn:hover { border-color: var(--border-strong); }
+.sel.open .sel-btn, .sel-btn:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
+.sel-btn:disabled { opacity: .55; cursor: default; }
+.sel-val { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel-chevron { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; transition: transform .15s; display: grid; }
+.sel.open .sel-chevron { transform: translateY(-50%) rotate(180deg); }
+.sel-pop { position: absolute; left: 0; top: calc(100% + 4px); min-width: 100%; max-width: min(360px, 90vw); background: var(--raised); border-radius: 10px; box-shadow: var(--shadow-lg); z-index: 60; overflow: hidden; animation: pop-in .12s var(--ease); }
+.sel-pop.up { top: auto; bottom: calc(100% + 4px); }
+.sel-search { position: relative; border-bottom: 1px solid var(--border); }
+.sel-search .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.sel-search input { border: 0; border-radius: 0; height: 40px; padding: 0 10px 0 32px; background: transparent; }
+.sel-search input:focus { box-shadow: none; }
+.sel-list { max-height: 260px; overflow-y: auto; padding: 4px; overscroll-behavior: contain; }
+.sel-group { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--faint); padding: 8px 8px 4px; }
+.sel-opt { display: flex; align-items: center; gap: 9px; padding: 7px 8px; border-radius: 6px; cursor: pointer; white-space: nowrap; font-size: 13.5px; min-height: 32px; }
+.sel-opt.hl { background: var(--hover); }
+.sel-opt.cur { font-weight: 600; }
+.sel-opt.action { color: var(--accent-ink); font-weight: 600; }
+.sel-lbl { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.sel-hint { font-size: 12px; color: var(--muted); }
+.sel-check { color: var(--accent); display: grid; }
+.sel-empty { padding: 14px; font-size: 13px; color: var(--muted); text-align: center; }
+.input-group > .sel { width: 120px; flex: 0 0 120px; }
+.input-group > .sel .sel-btn { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 0; }
+/* Settings → Connected apps: how Wishlist reaches a Pocket app */
+.conn-block { display: grid; gap: 12px; }
+.conn-mode { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.conn-advanced { background: none; border: 0; padding: 0; font: inherit; font-size: 12.5px; color: var(--muted); text-decoration: underline; cursor: pointer; }
+.conn-advanced:hover { color: var(--text); }
+.conn-status { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--muted); padding: 9px 12px; border-radius: 10px; background: var(--surface-2); line-height: 1.45; }
+.conn-status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex-shrink: 0; margin-top: 5px; }
+.conn-status.ok { color: var(--text); }
+.conn-status.ok .dot { background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
+.conn-status.bad .dot { background: var(--warning); box-shadow: 0 0 0 3px var(--warning-soft); }
+.setting-control .sel { min-width: 200px; }
+@media (max-width: 900px) {
+  .home-grid, .two-col.cols-2-3, .two-col.cols-3-2 { grid-template-columns: minmax(0, 1fr); }
+  .two-col.tight { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .hero h1 { font-size: 22px; }
+  .hero .hero-body { padding: 14px 16px; }
+  .hero .meta-line { font-size: 12.5px; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .toolbar .search { flex-basis: 100%; }
+  .toolbar .sel { min-width: 0; flex: 1 1 45%; }
+  .table { display: block; overflow-x: auto; white-space: nowrap; }
+}
+@media (max-width: 640px) {
+  .setting-control .sel { min-width: 0; }
+  .setting-control input:not([type="checkbox"]) { width: 100%; }
+  .wish-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .wish-card .cover { height: 120px; }
+  .wish-card .body { padding: 9px 10px 11px; }
+  .wish-card h3 { font-size: 14px; }
+}
+.sel-opt.is-disabled { opacity: .5; cursor: not-allowed; }
+
+/* cards and grids never wider than the screen */
+.card, .two-col > *, .home-grid > * { min-width: 0; }
+.bars-col { min-width: 0; overflow: hidden; }
+
+/* wide tables scroll inside their card on phones; the trends table drops the comparison columns */
+.card-body.flush { overflow-x: auto; }
+@media (max-width: 767px) {
+  .table.trends th:nth-child(3), .table.trends td:nth-child(3), .table.trends th:nth-child(5), .table.trends td:nth-child(5) { display: none; }
+}

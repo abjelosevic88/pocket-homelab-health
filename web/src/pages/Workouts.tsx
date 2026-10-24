@@ -33,7 +33,7 @@ export default function Workouts() {
     <div className="stack loose">
       <PageHeader title="Workouts" sub={`${total.n} in this range · ${fmtDurationS(total.s)}${total.d ? ` · ${fmtDistance(total.d)}` : ''}${total.e ? ` · ${Math.round(total.e).toLocaleString()} kcal` : ''}`}
         actions={<button type="button" className="btn primary" onClick={() => openCreate('workout')}><Icon name="plus" size={15} />Add</button>} />
-      <div className="row wrap">
+      <div className="row wrap filters">
         <div className="scroll-x"><Segmented size="sm" value={range} onChange={v => setSp({ range: v, ...(kind ? { kind } : {}) })} options={RANGES.map(r => ({ value: r.id, label: r.label }))} /></div>
         <Select value={kind} onChange={v => setSp({ range, ...(v ? { kind: v } : {}) })} options={(catalog?.workout_kinds || []).map(k => ({ value: k.key, label: k.name }))} placeholder="Every kind" clearLabel="Every kind" />
       </div>
