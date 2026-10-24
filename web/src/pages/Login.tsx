@@ -33,7 +33,7 @@ export default function Login({ mode }: { mode: 'login' | 'setup' }) {
         <div className="login-brand">
           <img src="/favicon.svg" alt="" width={44} height={44} />
           <h1>{title}</h1>
-          <p className="login-tagline">{mode === 'setup' ? 'Welcome! Create the first account to get started.' : 'Healths and gift ideas: watch prices, share lists, keep gifts a surprise.'}</p>
+          <p className="login-tagline">{mode === 'setup' ? 'Welcome! Create the first account to get started.' : 'Your health data at home: phone, watch, scale — goals, sleep, workouts, medications, insights.'}</p>
         </div>
         {sso && <>
           <a className="btn primary lg block" href={`${V1}/auth/oidc/start?next=${encodeURIComponent(from)}`}>

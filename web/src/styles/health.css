@@ -19,7 +19,7 @@
 @media (max-width: 900px) { .home-grid { grid-template-columns: 1fr; } }
 .big-num { font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .pad { padding: 8px 18px 18px; }
-.block { display: block; }
+span.block { display: block; }
 .mb { margin-bottom: 8px; }
 .mt { margin-top: 10px; }
 .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
