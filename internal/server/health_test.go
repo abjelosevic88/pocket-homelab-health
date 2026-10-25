@@ -418,3 +418,26 @@ func TestRouteSimplify(t *testing.T) {
 		t.Fatalf("distance = %v, want ~2000 m", dist)
 	}
 }
+
+// Mindful minutes from different sources (the watch, Pocket Still) add up;
+// Still zeroing a deleted practice takes its minutes out again.
+func TestMindfulMinutesSumAcrossSources(t *testing.T) {
+	a := newApp(t, nil)
+	day := time.Now().Add(-3 * time.Hour)
+	if day.Format("2006-01-02") != today() {
+		day = time.Now().Add(-time.Minute)
+	}
+	at := day.Format(time.RFC3339)
+	a.expect(201, a.alice, "POST", "/api/v1/samples", map[string]any{"metric": "mindful_min", "value": 10, "at": at, "source": "still"})
+	a.expect(201, a.alice, "POST", "/api/v1/samples", map[string]any{"metric": "mindful_min", "value": 5, "at": day.Add(-time.Minute).Format(time.RFC3339), "source": "hae"})
+	page := a.ok(a.alice, "GET", "/api/v1/metrics/mindful_min?range=w", nil)
+	pts := page["points"].([]any)
+	if len(pts) != 1 || num(pts[0].(map[string]any), "value") != 15 {
+		t.Fatalf("points = %v", pts)
+	}
+	a.expect(201, a.alice, "POST", "/api/v1/samples", map[string]any{"metric": "mindful_min", "value": 0, "at": at, "source": "still"})
+	page = a.ok(a.alice, "GET", "/api/v1/metrics/mindful_min?range=w", nil)
+	if v := num(page["points"].([]any)[0].(map[string]any), "value"); v != 5 {
+		t.Fatalf("after zeroing = %v", v)
+	}
+}

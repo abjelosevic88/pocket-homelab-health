@@ -57,6 +57,10 @@ type Metric struct {
 	Manual bool `json:"manual"`
 	// Goal is the default goal direction when someone sets a goal.
 	GoalDir string `json:"goal_dir"` // at_least | at_most | ""
+	// SumSources adds up a summed metric across sources (each its own
+	// sessions, like mindful minutes from the watch and from Pocket Still);
+	// within one source the one-device-per-day rule still applies.
+	SumSources bool `json:"sum_sources,omitempty"`
 
 	hae   []string // Health Auto Export names
 	apple []string // HKQuantityTypeIdentifier… names
@@ -144,7 +148,7 @@ var Catalog = []Metric{
 	{Key: "cycling_cadence", Name: "Cycling cadence", Unit: "rpm", Agg: Avg, Category: Mobility, Icon: "bike", Color: "#0ea5e9", hae: []string{"cycling_cadence"}, apple: []string{"CyclingCadence"}},
 	{Key: "cycling_ftp", Name: "Cycling FTP", Unit: "W", Agg: Last, Category: Mobility, Icon: "bike", Color: "#0ea5e9", HigherIsBetter: yes(), hae: []string{"cycling_functional_threshold_power"}, apple: []string{"CyclingFunctionalThresholdPower"}},
 	// ---- mind ----
-	{Key: "mindful_min", Name: "Mindful minutes", Unit: "min", Agg: Sum, Category: Mind, Icon: "brain", Color: "#06b6d4", Manual: true, HigherIsBetter: yes(), GoalDir: "at_least", hae: []string{"mindful_minutes"}, apple: []string{"MindfulSession"}},
+	{Key: "mindful_min", Name: "Mindful minutes", Unit: "min", Agg: Sum, Category: Mind, Icon: "brain", Color: "#06b6d4", Manual: true, HigherIsBetter: yes(), GoalDir: "at_least", SumSources: true, hae: []string{"mindful_minutes"}, apple: []string{"MindfulSession"}},
 	{Key: "mood", Name: "Mood", Unit: "1–5", Agg: Avg, Category: Mind, Decimals: 1, Icon: "smile", Color: "#06b6d4", Manual: true, HigherIsBetter: yes()},
 	{Key: "energy_level", Name: "Energy level", Unit: "1–5", Agg: Avg, Category: Mind, Decimals: 1, Icon: "zap", Color: "#06b6d4", Manual: true, HigherIsBetter: yes()},
 	{Key: "stress", Name: "Stress", Unit: "1–5", Agg: Avg, Category: Mind, Decimals: 1, Icon: "brain", Color: "#06b6d4", Manual: true, HigherIsBetter: no()},

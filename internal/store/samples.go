@@ -145,10 +145,6 @@ func (s *Store) rollupDay(ctx context.Context, uid int64, m metrics.Metric, date
 	if err != nil {
 		return err
 	}
-	type rec struct {
-		v, v2, lo, hi  sql.NullFloat64
-		dev, src, unit string
-	}
 	var recs []rec
 	for rows.Next() {
 		var r rec
@@ -171,34 +167,23 @@ func (s *Store) rollupDay(ctx context.Context, uid int64, m metrics.Metric, date
 	// steps would double them). The preferred device wins when it has data;
 	// else the device with the largest total (Apple's own dedupe lands near that).
 	if agg == metrics.Sum {
-		totals := map[string]float64{}
-		for _, r := range recs {
-			totals[r.dev] += r.v.Float64
-		}
-		if len(totals) > 1 {
-			win := ""
-			if prefer != "" {
-				for d := range totals {
-					if strings.EqualFold(d, prefer) {
-						win = d
-					}
+		if m.SumSources {
+			// each source keeps its own winning device, then the sources add up
+			bySrc := map[string][]rec{}
+			var order []string
+			for _, r := range recs {
+				if _, ok := bySrc[r.src]; !ok {
+					order = append(order, r.src)
 				}
-			}
-			if win == "" {
-				best := -1.0
-				for d, t := range totals {
-					if t > best || (t == best && d < win) {
-						best, win = t, d
-					}
-				}
+				bySrc[r.src] = append(bySrc[r.src], r)
 			}
 			var keep []rec
-			for _, r := range recs {
-				if r.dev == win {
-					keep = append(keep, r)
-				}
+			for _, src := range order {
+				keep = append(keep, oneDevice(bySrc[src], prefer)...)
 			}
 			recs = keep
+		} else {
+			recs = oneDevice(recs, prefer)
 		}
 	}
 	vals := make([]float64, 0, len(recs))
@@ -235,6 +220,47 @@ func (s *Store) rollupDay(ctx context.Context, uid int64, m metrics.Metric, date
 		ON CONFLICT(user_id, metric, date) DO UPDATE SET value = excluded.value, value2 = excluded.value2, min = excluded.min, max = excluded.max, n = excluded.n, updated_at = excluded.updated_at`,
 		uid, m.Key, date, value, value2, pf(lo), pf(hi), len(recs), Now())
 	return err
+}
+
+// rec is one sample row of a day being rolled up.
+type rec struct {
+	v, v2, lo, hi  sql.NullFloat64
+	dev, src, unit string
+}
+
+// oneDevice keeps the samples of one device: the preferred one when it has
+// data, else the device with the largest total (Apple's own dedupe lands near that).
+func oneDevice(recs []rec, prefer string) []rec {
+	totals := map[string]float64{}
+	for _, r := range recs {
+		totals[r.dev] += r.v.Float64
+	}
+	if len(totals) <= 1 {
+		return recs
+	}
+	win := ""
+	if prefer != "" {
+		for d := range totals {
+			if strings.EqualFold(d, prefer) {
+				win = d
+			}
+		}
+	}
+	if win == "" {
+		best := -1.0
+		for d, t := range totals {
+			if t > best || (t == best && d < win) {
+				best, win = t, d
+			}
+		}
+	}
+	var keep []rec
+	for _, r := range recs {
+		if r.dev == win {
+			keep = append(keep, r)
+		}
+	}
+	return keep
 }
 
 // RollupAll recomputes every day of every metric a person has (after an import).
