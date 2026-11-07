@@ -441,3 +441,32 @@ func TestMindfulMinutesSumAcrossSources(t *testing.T) {
 		t.Fatalf("after zeroing = %v", v)
 	}
 }
+
+func TestWorkoutTrackFromPhone(t *testing.T) {
+	reverseGeocodeURL = ""
+	a := newApp(t, nil)
+	d := today()
+	route := [][4]float64{{44.7700, 17.1900, 160, 0}, {44.7710, 17.1905, 162, 60}, {44.7720, 17.1910, 165, 120}}
+	w := map[string]any{"name": "Walking", "start": d + "T09:00:00Z", "end": d + "T09:20:00Z", "distance_m": 1020, "energy_kcal": 62,
+		"total_kcal": 101, "temperature": 4, "humidity": 90, "route": route, "heart_rate": [][2]float64{{0, 90}, {60, 104}}}
+	a.ok(a.alice, "POST", "/api/v1/ingest?source=pocket-homelab", map[string]any{"workouts": []any{w}})
+	_, _, list := a.call(a.alice, "GET", "/api/v1/workouts", nil)
+	wk := list[0].(map[string]any)
+	if num(wk, "total_kcal") != 101 || num(wk, "humidity") != 90 || num(wk, "temperature") != 4 {
+		t.Fatalf("workout = %v", wk)
+	}
+	id := int64(num(wk, "id"))
+	rv := a.ok(a.alice, "GET", fmt.Sprintf("/api/v1/workouts/%d/route", id), nil)
+	if rv["source"] != "phone" || len(rv["points"].([]any)) != 3 || len(rv["track"].([]any)) != 3 || len(rv["heart_rate"].([]any)) != 2 || num(rv, "distance_m") < 200 {
+		t.Fatalf("route = %v", rv)
+	}
+	// sent again before Apple Health saved the route: the route stays
+	delete(w, "route")
+	delete(w, "heart_rate")
+	a.ok(a.alice, "POST", "/api/v1/ingest?source=pocket-homelab", map[string]any{"workouts": []any{w}})
+	rv = a.ok(a.alice, "GET", fmt.Sprintf("/api/v1/workouts/%d/route", id), nil)
+	if rv["source"] != "phone" || len(rv["heart_rate"].([]any)) != 2 {
+		t.Fatalf("route after resend = %v", rv)
+	}
+	a.expect(404, a.bob, "GET", fmt.Sprintf("/api/v1/workouts/%d/route", id), nil)
+}

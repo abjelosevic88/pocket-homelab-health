@@ -3,17 +3,18 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 )
 
-const workoutCols = `id, user_id, kind, name, start_at, end_at, date, duration_s, distance_m, energy_kcal, avg_hr, max_hr, elevation_m, steps, temperature, humidity, source, device, external_id, notes, habit_id, habit_marked_at, habit_error, created_at, updated_at`
+const workoutCols = `id, user_id, kind, name, start_at, end_at, date, duration_s, distance_m, energy_kcal, total_kcal, avg_hr, max_hr, elevation_m, steps, temperature, humidity, place, source, device, external_id, notes, habit_id, habit_marked_at, habit_error, created_at, updated_at`
 
 func scanWorkout(row interface{ Scan(...any) error }) (Workout, error) {
 	var w Workout
 	var temp, hum sql.NullFloat64
 	var habit sql.NullInt64
-	if err := row.Scan(&w.ID, &w.UserID, &w.Kind, &w.Name, &w.StartAt, &w.EndAt, &w.Date, &w.DurationS, &w.DistanceM, &w.EnergyKcal, &w.AvgHR, &w.MaxHR, &w.ElevationM, &w.Steps, &temp, &hum, &w.Source, &w.Device, &w.ExternalID, &w.Notes, &habit, &w.HabitMarkedAt, &w.HabitError, &w.CreatedAt, &w.UpdatedAt); err != nil {
+	if err := row.Scan(&w.ID, &w.UserID, &w.Kind, &w.Name, &w.StartAt, &w.EndAt, &w.Date, &w.DurationS, &w.DistanceM, &w.EnergyKcal, &w.TotalKcal, &w.AvgHR, &w.MaxHR, &w.ElevationM, &w.Steps, &temp, &hum, &w.Place, &w.Source, &w.Device, &w.ExternalID, &w.Notes, &habit, &w.HabitMarkedAt, &w.HabitError, &w.CreatedAt, &w.UpdatedAt); err != nil {
 		return w, notFound(err)
 	}
 	w.Temperature, w.Humidity = nf(temp), nf(hum)
@@ -53,27 +54,72 @@ func (s *Store) UpsertWorkouts(ctx context.Context, uid int64, in []Workout) (in
 		var id int64
 		err := s.DB.QueryRowContext(ctx, `SELECT id FROM workouts WHERE user_id = ? AND start_at = ? AND kind = ? AND source = ?`, uid, w.StartAt, w.Kind, w.Source).Scan(&id)
 		if err == nil {
-			_, err = s.DB.ExecContext(ctx, `UPDATE workouts SET name = ?, end_at = ?, date = ?, duration_s = ?, distance_m = ?, energy_kcal = ?, avg_hr = ?, max_hr = ?, elevation_m = ?, steps = ?, temperature = ?, humidity = ?, device = ?, external_id = ?,
-				notes = CASE WHEN ? <> '' THEN ? ELSE notes END, updated_at = ? WHERE id = ?`,
-				w.Name, w.EndAt, w.Date, w.DurationS, w.DistanceM, w.EnergyKcal, w.AvgHR, w.MaxHR, w.ElevationM, w.Steps, pf(w.Temperature), pf(w.Humidity), w.Device, w.ExternalID, w.Notes, w.Notes, Now(), id)
+			_, err = s.DB.ExecContext(ctx, `UPDATE workouts SET name = ?, end_at = ?, date = ?, duration_s = ?, distance_m = ?, energy_kcal = ?, total_kcal = ?, avg_hr = ?, max_hr = ?, elevation_m = ?, steps = ?, temperature = ?, humidity = ?, device = ?, external_id = ?,
+				place = CASE WHEN ? <> '' THEN ? ELSE place END, notes = CASE WHEN ? <> '' THEN ? ELSE notes END, updated_at = ? WHERE id = ?`,
+				w.Name, w.EndAt, w.Date, w.DurationS, w.DistanceM, w.EnergyKcal, w.TotalKcal, w.AvgHR, w.MaxHR, w.ElevationM, w.Steps, pf(w.Temperature), pf(w.Humidity), w.Device, w.ExternalID, w.Place, w.Place, w.Notes, w.Notes, Now(), id)
 			if err != nil {
 				return n, fresh, err
 			}
 			w.ID = id
+			if err := s.putTrack(ctx, w); err != nil {
+				return n, fresh, err
+			}
 			n++
 			continue
 		}
-		res, err := s.DB.ExecContext(ctx, `INSERT INTO workouts (user_id, kind, name, start_at, end_at, date, duration_s, distance_m, energy_kcal, avg_hr, max_hr, elevation_m, steps, temperature, humidity, source, device, external_id, notes)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			uid, w.Kind, w.Name, w.StartAt, w.EndAt, w.Date, w.DurationS, w.DistanceM, w.EnergyKcal, w.AvgHR, w.MaxHR, w.ElevationM, w.Steps, pf(w.Temperature), pf(w.Humidity), w.Source, w.Device, w.ExternalID, w.Notes)
+		res, err := s.DB.ExecContext(ctx, `INSERT INTO workouts (user_id, kind, name, start_at, end_at, date, duration_s, distance_m, energy_kcal, total_kcal, avg_hr, max_hr, elevation_m, steps, temperature, humidity, place, source, device, external_id, notes)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			uid, w.Kind, w.Name, w.StartAt, w.EndAt, w.Date, w.DurationS, w.DistanceM, w.EnergyKcal, w.TotalKcal, w.AvgHR, w.MaxHR, w.ElevationM, w.Steps, pf(w.Temperature), pf(w.Humidity), w.Place, w.Source, w.Device, w.ExternalID, w.Notes)
 		if err != nil {
 			return n, fresh, err
 		}
 		w.ID, _ = res.LastInsertId()
+		if err := s.putTrack(ctx, w); err != nil {
+			return n, fresh, err
+		}
 		fresh = append(fresh, w.ID)
 		n++
 	}
 	return n, fresh, nil
+}
+
+// putTrack keeps what the phone recorded along a workout. A copy sent without
+// a route (Apple Health saves the route a moment after the workout) keeps the
+// route already here; the same goes for the heart rate.
+func (s *Store) putTrack(ctx context.Context, w *Workout) error {
+	if len(w.Route) == 0 && len(w.HeartRate) == 0 {
+		return nil
+	}
+	route, _ := json.Marshal(w.Route)
+	hr, _ := json.Marshal(w.HeartRate)
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO workout_tracks (workout_id, route, heart_rate, updated_at) VALUES (?, ?, ?, ?)
+		ON CONFLICT(workout_id) DO UPDATE SET
+			route = CASE WHEN excluded.route <> '[]' AND excluded.route <> 'null' THEN excluded.route ELSE route END,
+			heart_rate = CASE WHEN excluded.heart_rate <> '[]' AND excluded.heart_rate <> 'null' THEN excluded.heart_rate ELSE heart_rate END,
+			updated_at = excluded.updated_at`, w.ID, string(route), string(hr), Now())
+	return err
+}
+
+// WorkoutTrack returns what the phone recorded along a workout, or nil.
+func (s *Store) WorkoutTrack(ctx context.Context, workoutID int64) (*WorkoutTrack, error) {
+	var route, hr string
+	t := &WorkoutTrack{}
+	err := s.DB.QueryRowContext(ctx, `SELECT route, heart_rate, updated_at FROM workout_tracks WHERE workout_id = ?`, workoutID).Scan(&route, &hr, &t.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	_ = json.Unmarshal([]byte(route), &t.Route)
+	_ = json.Unmarshal([]byte(hr), &t.HeartRate)
+	return t, nil
+}
+
+// SetWorkoutPlace names the town a workout started in.
+func (s *Store) SetWorkoutPlace(ctx context.Context, uid, id int64, place string) error {
+	_, err := s.DB.ExecContext(ctx, `UPDATE workouts SET place = ? WHERE id = ? AND user_id = ?`, place, id, uid)
+	return err
 }
 
 // WorkoutFilter narrows a listing.

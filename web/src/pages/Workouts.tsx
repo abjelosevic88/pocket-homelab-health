@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { RANGES, type Habit, type Route, type Workout, type WorkoutStats } from '../lib/types'
@@ -6,10 +6,11 @@ import { fmtDate, fmtDateTime, fmtISOTime, weekday } from '../lib/format'
 import { fmtDistance, fmtDurationS, fmtPace } from '../lib/units'
 import { Confirm, CoreHint, Empty, Loading, PageHeader, Segmented, useToast } from '../components/ui'
 import { Icon, KIND_ICON } from '../components/icons'
-import { Bars } from '../components/Chart'
+import { Bars, LineChart } from '../components/Chart'
 import { WorkoutModal } from '../components/forms'
 import { Select } from '../components/Select'
 import { RouteMap } from '../components/RouteMap'
+import { clock, cumulative, speeds as trackSpeeds, splits as trackSplits, thin } from '../lib/track'
 import { openCreate, useCatalog, useCrumb, useOnChange } from '../components/Layout'
 
 export default function Workouts() {
@@ -88,6 +89,15 @@ export function WorkoutPage() {
   const load = () => api.get<Workout>(`${V1}/workouts/${id}`).then(setW).catch(e => toast((e as Error).message, 'err'))
   useEffect(() => { load() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { api.get<{ connected: boolean; habits: Habit[]; open_url?: string }>(`${V1}/habits/list`).then(setHabits).catch(() => {}) }, [])
+  const track = route?.track
+  const speeds = useMemo(() => track && track.length > 1 && track.some(p => p[3] > 0) ? trackSpeeds(track) : undefined, [track])
+  const splits = useMemo(() => track ? trackSplits(track, route?.heart_rate) : [], [track, route?.heart_rate])
+  const elevation = useMemo(() => {
+    if (!track || track.length < 2 || !track.some(p => p[2] !== 0)) return []
+    const d = cumulative(track)
+    return thin(track.map((p, i) => ({ x: String(d[i]), y: p[2] }))) // x: metres from the start
+  }, [track])
+  const heart = useMemo(() => thin((route?.heart_rate || []).map(([t, bpm]) => ({ x: String(t), y: bpm }))), [route?.heart_rate])
   useCrumb(w ? (w.name || w.kind) : undefined)
   if (!w) return <Loading />
   const tick = async (habitId: number) => { try { const r = await api.post<{ ok: boolean; error?: string }>(`${V1}/workouts/${w.id}/habit`, { habit_id: habitId }); toast(r.ok ? 'Habit ticked' : r.error || 'failed', r.ok ? 'ok' : 'err'); load() } catch (e) { toast((e as Error).message, 'err') } }
@@ -98,7 +108,8 @@ export function WorkoutPage() {
     ...(w.distance_m ? [['Distance', fmtDistance(w.distance_m)] as [string, string]] : []),
     ...(pace && (w.kind === 'running' || w.kind === 'walking' || w.kind === 'hiking') ? [['Pace', fmtPace(pace)] as [string, string]] : []),
     ...(w.distance_m && w.kind === 'cycling' ? [['Speed', `${((w.distance_m / 1000) / (w.duration_s / 3600)).toFixed(1)} km/h`] as [string, string]] : []),
-    ...(w.energy_kcal ? [['Energy', `${Math.round(w.energy_kcal)} kcal`] as [string, string]] : []),
+    ...(w.energy_kcal ? [[w.total_kcal > w.energy_kcal ? 'Active energy' : 'Energy', `${Math.round(w.energy_kcal)} kcal`] as [string, string]] : []),
+    ...(w.total_kcal > w.energy_kcal ? [['Total energy', `${Math.round(w.total_kcal)} kcal`] as [string, string]] : []),
     ...(w.avg_hr ? [['Avg heart rate', `${Math.round(w.avg_hr)} bpm`] as [string, string]] : []),
     ...(w.max_hr ? [['Max heart rate', `${Math.round(w.max_hr)} bpm`] as [string, string]] : []),
     ...(w.elevation_m ? [['Elevation', `${Math.round(w.elevation_m)} m`] as [string, string]] : []),
@@ -108,15 +119,23 @@ export function WorkoutPage() {
   return (
     <div className="stack loose">
       <PageHeader title={<span className="row" style={{ gap: 10 }}><span className="tile-ico lg" style={{ '--tile': '#22c55e' } as React.CSSProperties}><Icon name={KIND_ICON[w.kind] || 'activity'} size={18} /></span>{w.name || w.kind}</span>}
-        sub={`${fmtDateTime(w.start_at)} · ${w.source}${w.device ? ` · ${w.device}` : ''}`}
+        sub={`${fmtDateTime(w.start_at)}${w.end_at ? `–${fmtISOTime(w.end_at)}` : ''}${w.place || route?.place ? ` · ${w.place || route?.place}` : ''} · ${w.source}${w.device ? ` · ${w.device}` : ''}`}
         actions={<><button type="button" className="btn" onClick={() => setEdit(true)}><Icon name="edit" size={15} />Edit</button><button type="button" className="btn ghost danger-text" onClick={() => setDel(true)}>Delete</button></>} />
       <div className="stats-row">{stats.map(([l, v]) => <div key={l} className="stat"><span className="stat-l">{l}</span><span className="stat-v tnum">{v}</span></div>)}</div>
       {w.notes && <section className="card"><div className="card-body"><p style={{ whiteSpace: 'pre-wrap' }}>{w.notes}</p></div></section>}
-      <section className="card"><div className="card-head"><div className="grow"><h2>Route</h2><p className="muted small">{!route ? 'Looking for the positions recorded during the workout…' : !route.connected ? `Pocket Movement is not connected${route.detail ? `: ${route.detail}` : ''}.` : route.detail ? `Could not read the route: ${route.detail}` : route.n === 0 ? 'Nothing was recorded between the start and the end of this workout.' : `${route.n.toLocaleString()} positions from Pocket Movement · ${fmtDistance(route.distance_m)} recorded${w.distance_m ? ` (the workout says ${fmtDistance(w.distance_m)})` : ''}`}</p></div>
-        {route?.connected && <span className="row"><button type="button" className="btn ghost sm" onClick={() => loadRoute(true)}>Refresh</button>{route.distance_m > 0 && Math.abs(route.distance_m - w.distance_m) > 50 && <button type="button" className="btn sm" onClick={async () => { try { setW(await api.post<Workout>(`${V1}/workouts/${w.id}/route/apply`)); toast('Distance taken from the route') } catch (e) { toast((e as Error).message, 'err') } }}>Use this distance</button>}</span>}</div>
-        {route?.connected && route.points.length > 1 && <div className="card-body flush"><RouteMap points={route.points} /></div>}
+      <section className="card"><div className="card-head"><div className="grow"><h2>Route</h2><p className="muted small">{!route ? 'Looking for the positions recorded during the workout…' : route.source === 'phone' ? `Recorded by ${w.device || 'the phone'} · ${route.n.toLocaleString()} positions · ${fmtDistance(route.distance_m)}` : !route.connected ? `Pocket Movement is not connected${route.detail ? `: ${route.detail}` : ''}.` : route.detail ? `Could not read the route: ${route.detail}` : route.n === 0 ? 'Nothing was recorded between the start and the end of this workout.' : `${route.n.toLocaleString()} positions from Pocket Movement · ${fmtDistance(route.distance_m)} recorded${w.distance_m ? ` (the workout says ${fmtDistance(w.distance_m)})` : ''}`}</p></div>
+        {route?.connected && route.source !== 'phone' && <span className="row"><button type="button" className="btn ghost sm" onClick={() => loadRoute(true)}>Refresh</button>{route.distance_m > 0 && Math.abs(route.distance_m - w.distance_m) > 50 && <button type="button" className="btn sm" onClick={async () => { try { setW(await api.post<Workout>(`${V1}/workouts/${w.id}/route/apply`)); toast('Distance taken from the route') } catch (e) { toast((e as Error).message, 'err') } }}>Use this distance</button>}</span>}</div>
+        {route?.connected && route.points.length > 1 && <div className="card-body flush"><RouteMap points={route.points} speeds={speeds} /></div>}
+        {speeds && <div className="card-body"><span className="pace-legend muted small"><span>Slower</span><i /><span>Faster</span></span></div>}
         {route && !route.connected && <div className="card-body"><p className="muted small">Connect Pocket Movement under <Link to="/settings/apps">Settings → Connected apps</Link> and every workout gets its map, drawn from the positions your phone recorded while it ran.{!settings?.core_configured && <CoreHint />}</p></div>}
       </section>
+      {splits.length > 0 && <section className="card"><div className="card-head"><div className="grow"><h2>Splits</h2></div></div>
+        <div className="card-body flush"><table className="table compact"><thead><tr><th>{settings?.units === 'imperial' ? 'Mile' : 'Km'}</th><th className="right">Time</th><th className="right">Pace</th><th className="right">Climb</th>{splits.some(x => x.avg_hr) && <th className="right">Heart rate</th>}</tr></thead>
+          <tbody>{splits.map(x => <tr key={x.n}><td className="tnum">{x.distance_m < (settings?.units === 'imperial' ? 1609 : 1000) - 1 ? fmtDistance(x.distance_m) : x.n}</td><td className="right tnum">{clock(x.time_s)}</td><td className="right tnum">{fmtPace(x.pace)}</td><td className="right tnum">{Math.round(x.climb_m)} m</td>{splits.some(y => y.avg_hr) && <td className="right tnum">{x.avg_hr ? `${Math.round(x.avg_hr)} bpm` : '—'}</td>}</tr>)}</tbody></table></div></section>}
+      {heart.length > 1 && <section className="card"><div className="card-head"><div className="grow"><h2>Heart rate</h2><p className="muted small">{w.avg_hr ? `Average ${Math.round(w.avg_hr)} bpm` : ''}{w.max_hr ? ` · max ${Math.round(w.max_hr)} bpm` : ''}</p></div></div>
+        <div className="card-body"><LineChart points={heart} color="#ef4444" kind="area" xLabel={x => clock(+x)} format={v => String(Math.round(v))} /></div></section>}
+      {elevation.length > 1 && <section className="card"><div className="card-head"><div className="grow"><h2>Elevation</h2><p className="muted small">{w.elevation_m ? `${Math.round(w.elevation_m)} m climbed` : ''}</p></div></div>
+        <div className="card-body"><LineChart points={elevation} color="#22c55e" kind="area" xLabel={x => fmtDistance(+x) === '—' ? '0' : fmtDistance(+x)} format={v => `${Math.round(v)} m`} /></div></section>}
       <section className="card"><div className="card-head"><div className="grow"><h2>Pocket Habits</h2><p className="muted small">{w.habit_id ? `Ticked habit #${w.habit_id} on ${fmtDate(w.date)}` : w.habit_error ? `Could not tick a habit: ${w.habit_error}` : 'Tick a habit for this workout (rules under Settings → Connected apps do it automatically).'}</p></div></div>
         <div className="card-body">
           {habits?.connected ? <div className="row wrap">{habits.habits.map(h => <button key={h.id} type="button" className={`chip ${w.habit_id === h.id ? 'active' : ''}`} onClick={() => tick(h.id)}><Icon name="habit" size={13} />{h.name}</button>)}{habits.habits.length === 0 && <span className="muted small">No habits in Pocket Habits yet.</span>}</div>

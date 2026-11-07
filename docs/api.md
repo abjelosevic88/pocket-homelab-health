@@ -15,7 +15,8 @@ Returns `{"samples": n, "workouts": n, "sleep": n, "skipped": n, "unknown": [...
 ```json
 {
   "samples":  [{"metric": "weight", "at": "2025-10-23T07:30:00+02:00", "value": 80.4, "unit": "kg", "device": "Withings", "note": ""}],
-  "workouts": [{"kind": "running", "start": "2025-10-23T07:00:00+02:00", "end": "2025-10-23T07:35:00+02:00", "distance_m": 5200, "energy_kcal": 310, "avg_hr": 151, "max_hr": 171, "elevation_m": 42}],
+  "workouts": [{"kind": "running", "start": "2025-10-23T07:00:00+02:00", "end": "2025-10-23T07:35:00+02:00", "distance_m": 5200, "energy_kcal": 310, "avg_hr": 151, "max_hr": 171, "elevation_m": 42,
+                "total_kcal": 390, "temperature": 12, "humidity": 70, "route": [[44.7712, 17.1913, 162.5, 0], [44.7716, 17.1918, 163.0, 9]], "heart_rate": [[0, 98], [10, 112]]}],
   "sleep":    [{"start": "2025-10-22T23:10:00+02:00", "end": "2025-10-23T06:40:00+02:00", "asleep_min": 408, "deep_min": 66, "rem_min": 84, "core_min": 258, "awake_min": 42}]
 }
 ```
@@ -28,7 +29,7 @@ Returns `{"samples": n, "workouts": n, "sleep": n, "skipped": n, "unknown": [...
 
 ### `POST /workouts`, `POST /sleep`
 
-Same fields as above, one at a time. `PUT/DELETE /workouts/{id}`, `POST /workouts/{id}/habit {"habit_id": n}` ticks a Pocket Habits habit for it, `GET /workouts/{id}/route[?fresh=1]` is the route recorded by Pocket Movement between start and end (`points`, `distance_m`, `bounds`; cached a day), `POST /workouts/{id}/route/apply` copies that distance onto the workout, `DELETE /sleep/{id}`.
+Same fields as above, one at a time. `PUT/DELETE /workouts/{id}`, `POST /workouts/{id}/habit {"habit_id": n}` ticks a Pocket Habits habit for it, `GET /workouts/{id}/route[?fresh=1]` is the workout's route: the one the phone sent with it (`source: "phone"`, also `track` with altitude and seconds from the start, `heart_rate`, `place`), else the one Pocket Movement recorded between start and end (`source: "movement"`, `points`, `distance_m`, `bounds`; cached a day), `POST /workouts/{id}/route/apply` copies that distance onto the workout, `DELETE /sleep/{id}`.
 
 ### Imports
 

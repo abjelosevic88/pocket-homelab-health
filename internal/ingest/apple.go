@@ -362,10 +362,13 @@ func Apple(ctx context.Context, r io.Reader, sink Sink, since string) (*AppleSta
 							f := strings.Fields(b["value"])
 							if len(f) > 0 {
 								if v, ok := num(f[0]); ok {
-									if v > 1 {
-										v = v / 100
+									// "90 %", "0.9" or HealthKit's own "9000 %"
+									h := v
+									if v <= 1 {
+										h = v * 100
+									} else if v > 100 {
+										h = v / 100
 									}
-									h := v * 100
 									w.Humidity = &h
 								}
 							}

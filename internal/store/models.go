@@ -62,12 +62,14 @@ type Workout struct {
 	DurationS     int      `json:"duration_s"`
 	DistanceM     float64  `json:"distance_m"`
 	EnergyKcal    float64  `json:"energy_kcal"`
+	TotalKcal     float64  `json:"total_kcal"`
 	AvgHR         float64  `json:"avg_hr"`
 	MaxHR         float64  `json:"max_hr"`
 	ElevationM    float64  `json:"elevation_m"`
 	Steps         int      `json:"steps"`
 	Temperature   *float64 `json:"temperature"`
 	Humidity      *float64 `json:"humidity"`
+	Place         string   `json:"place"`
 	Source        string   `json:"source"`
 	Device        string   `json:"device"`
 	ExternalID    string   `json:"external_id"`
@@ -77,6 +79,17 @@ type Workout struct {
 	HabitError    string   `json:"habit_error"`
 	CreatedAt     string   `json:"created_at"`
 	UpdatedAt     string   `json:"updated_at"`
+	// What the phone recorded along the way; written to workout_tracks, read with WorkoutTrack.
+	Route     [][4]float64 `json:"-"`
+	HeartRate [][2]float64 `json:"-"`
+}
+
+// WorkoutTrack is a workout's recorded route ([lat, lng, altitude m, seconds
+// from the start]) and heart rate ([seconds from the start, bpm]).
+type WorkoutTrack struct {
+	Route     [][4]float64 `json:"route"`
+	HeartRate [][2]float64 `json:"heart_rate"`
+	UpdatedAt string       `json:"updated_at"`
 }
 
 // SleepSession is one night; Date is the morning.

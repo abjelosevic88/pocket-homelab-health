@@ -22,9 +22,9 @@ function nice(v: number): string {
 }
 
 /** Line (or area) chart over dates. `kind` bar draws bars (summed metrics). */
-export function LineChart({ points, height = 180, color = 'var(--accent)', kind = 'line', goal, goalLabel, format = nice, zero = false, avg, band, className = '' }: {
+export function LineChart({ points, height = 180, color = 'var(--accent)', kind = 'line', goal, goalLabel, format = nice, zero = false, avg, band, xLabel, className = '' }: {
   points: Pt[]; height?: number; color?: string; kind?: 'line' | 'bar' | 'area'; goal?: number; goalLabel?: string; format?: (v: number) => string; zero?: boolean; avg?: number
-  band?: [number, number]; className?: string
+  band?: [number, number]; xLabel?: (x: string) => string; className?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [hover, setHover] = useState<number | null>(null)
@@ -86,10 +86,10 @@ export function LineChart({ points, height = 180, color = 'var(--accent)', kind 
         {kind !== 'bar' && path && <path className="line" d={path} stroke={color} />}
         {kind !== 'bar' && path2 && <path className="line line2" d={path2} stroke={color} />}
         {kind !== 'bar' && n <= 60 && points.map((p, i) => p.y === null || Number.isNaN(p.y) ? null : <circle key={i} className="dot" cx={x(i)} cy={y(p.y)} r={2.6} fill={color} />)}
-        {points.map((p, i) => i % labelEvery === 0 || i === n - 1 ? <text key={i} className="tick" x={x(i)} y={H - 6} textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}>{fmtDate(p.x, false)}</text> : null)}
+        {points.map((p, i) => i % labelEvery === 0 || i === n - 1 ? <text key={i} className="tick" x={x(i)} y={H - 6} textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}>{xLabel ? xLabel(p.x) : fmtDate(p.x, false)}</text> : null)}
         {hp && hover !== null && <g><line className="cursor" x1={x(hover)} x2={x(hover)} y1={T} y2={H - B} />{hp.y !== null && !Number.isNaN(hp.y) && <circle cx={x(hover)} cy={y(hp.y)} r={4.5} fill={color} className="dot-hi" />}</g>}
       </svg>
-      {hp && <div className="chart-tip" style={{ left: `${((x(hover!) / W) * 100).toFixed(1)}%` }}><b>{hp.y === null || Number.isNaN(hp.y) ? '—' : format(hp.y)}{hp.y2 !== null && hp.y2 !== undefined ? ` / ${format(hp.y2)}` : ''}</b><span>{fmtDate(hp.x)}</span></div>}
+      {hp && <div className="chart-tip" style={{ left: `${((x(hover!) / W) * 100).toFixed(1)}%` }}><b>{hp.y === null || Number.isNaN(hp.y) ? '—' : format(hp.y)}{hp.y2 !== null && hp.y2 !== undefined ? ` / ${format(hp.y2)}` : ''}</b><span>{xLabel ? xLabel(hp.x) : fmtDate(hp.x)}</span></div>}
     </div>
   )
 }

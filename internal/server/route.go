@@ -6,18 +6,21 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/abjelosevic88/pocket-homelab-health/internal/pocket"
 	"github.com/abjelosevic88/pocket-homelab-health/internal/store"
 )
 
-// ---- a workout's route from Pocket Movement ----
+// ---- a workout's route ----
 //
-// Movement (or Dawarich) keeps the phone's positions; Health asks for the
-// ones recorded between a workout's start and end and draws them. The
-// answer is cached a day per workout; "apply" copies the recorded distance
-// onto a workout that has none.
+// The iPhone app sends the route Apple Health recorded with the workout (and
+// the heart rate along it); that is kept in workout_tracks and wins. Without
+// one, Movement (or Dawarich) keeps the phone's positions; Health asks for the
+// ones recorded between a workout's start and end and draws them. That answer
+// is cached a day per workout; "apply" copies the recorded distance onto a
+// workout that has none.
 
 type routeView struct {
 	Connected bool         `json:"connected"`
@@ -31,12 +34,63 @@ type routeView struct {
 	End       string       `json:"end"`
 	FetchedAt string       `json:"fetched_at"`
 	OpenURL   string       `json:"open_url,omitempty"`
+	// "phone" (Apple Health's route, sent with the workout) or "movement"
+	Source string `json:"source"`
+	// The phone's route with altitude and time: [lat, lng, altitude m, seconds from the start]
+	Track     [][4]float64 `json:"track,omitempty"`
+	HeartRate [][2]float64 `json:"heart_rate,omitempty"`
+	Place     string       `json:"place,omitempty"`
 }
 
 func routeKey(uid, wid int64) string { return fmt.Sprintf("route:%d:%d", uid, wid) }
 
-// workoutRoute returns the cached route or fetches it from Movement.
+// workoutRoute returns the phone's route, else the cached one or Movement's.
 func (s *Server) workoutRoute(ctx context.Context, uid int64, wk *store.Workout, fresh bool) (*routeView, error) {
+	track, err := s.store.WorkoutTrack(ctx, wk.ID)
+	if err != nil {
+		return nil, err
+	}
+	if track != nil && len(track.Route) > 1 {
+		return s.phoneRoute(ctx, uid, wk, track), nil
+	}
+	rv, err := s.movementRoute(ctx, uid, wk, fresh)
+	if err != nil {
+		return nil, err
+	}
+	if track != nil {
+		rv.HeartRate = track.HeartRate
+	}
+	return rv, nil
+}
+
+// phoneRoute draws what Apple Health recorded; the town it started in is
+// looked up once and kept on the workout.
+func (s *Server) phoneRoute(ctx context.Context, uid int64, wk *store.Workout, t *store.WorkoutTrack) *routeView {
+	rv := &routeView{Connected: true, Via: "Apple Health", Source: "phone", Start: wk.StartAt, End: wk.EndAt, FetchedAt: t.UpdatedAt,
+		Track: t.Route, HeartRate: t.HeartRate, N: len(t.Route), Place: wk.Place}
+	rv.Points = make([][2]float64, 0, len(t.Route))
+	minLat, minLng, maxLat, maxLng := 90.0, 180.0, -90.0, -180.0
+	for i, p := range t.Route {
+		if i > 0 {
+			rv.DistanceM += haversine(t.Route[i-1][0], t.Route[i-1][1], p[0], p[1])
+		}
+		rv.Points = append(rv.Points, [2]float64{p[0], p[1]})
+		minLat, maxLat = math.Min(minLat, p[0]), math.Max(maxLat, p[0])
+		minLng, maxLng = math.Min(minLng, p[1]), math.Max(maxLng, p[1])
+	}
+	rv.DistanceM = math.Round(rv.DistanceM)
+	rv.Bounds = [][2]float64{{minLat, minLng}, {maxLat, maxLng}}
+	if rv.Place == "" {
+		if place := reversePlace(ctx, t.Route[0][0], t.Route[0][1]); place != "" {
+			rv.Place = place
+			_ = s.store.SetWorkoutPlace(ctx, uid, wk.ID, place)
+		}
+	}
+	return rv
+}
+
+// movementRoute returns the cached route or fetches it from Movement.
+func (s *Server) movementRoute(ctx context.Context, uid int64, wk *store.Workout, fresh bool) (*routeView, error) {
 	key := routeKey(uid, wk.ID)
 	if !fresh {
 		if v, at, ok := s.store.CacheGet(ctx, key); ok {
@@ -48,7 +102,7 @@ func (s *Server) workoutRoute(ctx context.Context, uid int64, wk *store.Workout,
 			}
 		}
 	}
-	rv := &routeView{Points: [][2]float64{}, Start: wk.StartAt, End: wk.EndAt, FetchedAt: store.Now()}
+	rv := &routeView{Points: [][2]float64{}, Source: "movement", Start: wk.StartAt, End: wk.EndAt, FetchedAt: store.Now()}
 	conn, err := s.clients(ctx, uid).conn(ctx, appMovement, scopeMovementPoints)
 	if err != nil {
 		if isNotConnected(err) {
@@ -115,6 +169,53 @@ func simplify(pts []pocket.Point) ([][2]float64, float64) {
 	return out, math.Round(dist)
 }
 
+// reverseGeocodeURL names the town at a coordinate (OpenStreetMap's Nominatim);
+// empty turns the lookup off (tests).
+var reverseGeocodeURL = "https://nominatim.openstreetmap.org/reverse"
+
+// reversePlace is the town or city at a coordinate, or "" when it cannot be told.
+func reversePlace(ctx context.Context, lat, lng float64) string {
+	if reverseGeocodeURL == "" {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+	q := url.Values{}
+	q.Set("lat", fmt.Sprintf("%.5f", lat))
+	q.Set("lon", fmt.Sprintf("%.5f", lng))
+	q.Set("zoom", "10")
+	q.Set("format", "jsonv2")
+	q.Set("accept-language", "en")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reverseGeocodeURL+"?"+q.Encode(), nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("User-Agent", "pocket-health/"+Version)
+	res, err := weatherHTTP.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 400 {
+		return ""
+	}
+	var body struct {
+		Name    string `json:"name"`
+		Address struct {
+			City, Town, Village, Municipality string
+		} `json:"address"`
+	}
+	if json.NewDecoder(res.Body).Decode(&body) != nil {
+		return ""
+	}
+	for _, v := range []string{body.Address.City, body.Address.Town, body.Address.Village, body.Address.Municipality, body.Name} {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func round6(v float64) float64 { return math.Round(v*1e6) / 1e6 }
 
 // haversine is the distance in metres between two coordinates.
@@ -137,7 +238,7 @@ func (s *Server) handleWorkoutRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	rv, err := s.workoutRoute(ctx, uid, wk, queryBool(r, "fresh"))
 	if err != nil {
-		writeJSON(w, http.StatusOK, routeView{Connected: true, Detail: err.Error(), Points: [][2]float64{}, Start: wk.StartAt, End: wk.EndAt})
+		writeJSON(w, http.StatusOK, routeView{Connected: true, Detail: err.Error(), Points: [][2]float64{}, Source: "movement", Start: wk.StartAt, End: wk.EndAt})
 		return
 	}
 	writeJSON(w, http.StatusOK, rv)
