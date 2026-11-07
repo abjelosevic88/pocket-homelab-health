@@ -8,6 +8,7 @@ export interface Settings {
   core_configured: boolean
   core_registered?: boolean
   title: string; units: 'metric' | 'imperial'; height_cm: number; birth_date: string; sex: string
+  blood_type: string; skin_type: string; wheelchair: boolean
   date_format: string; time_format: string; week_start: number; home_metrics: string[]
   notify_url: string; notify_format: string; notify_goals: boolean; notify_weekly: boolean; notify_meds: boolean; notify_inactive: boolean
   notify_hour: number; weekly_day: number; notify_configured: boolean
@@ -22,7 +23,7 @@ export interface Settings {
 }
 
 export type Agg = 'sum' | 'avg' | 'last' | 'max' | 'min'
-export type Category = 'activity' | 'body' | 'heart' | 'vitals' | 'sleep' | 'nutrition' | 'mobility' | 'mind' | 'hearing' | 'other'
+export type Category = 'activity' | 'body' | 'heart' | 'vitals' | 'sleep' | 'nutrition' | 'mobility' | 'mind' | 'hearing' | 'cycle' | 'other'
 
 export interface Metric {
   key: string; name: string; unit: string; imperial_unit: string; agg: Agg; category: Category; decimals: number
@@ -107,3 +108,8 @@ export interface TrackPart {
 }
 /** GET /workouts/{id}/track: series as [seconds, value] by key, the parts and the splits. */
 export interface WorkoutTrack { route: [number, number, number, number][]; series: Record<string, [number, number][]>; segments: TrackPart[]; splits: TrackPart[]; split_unit: 'km' | 'mi'; distance_from: '' | 'series' | 'route'; updated_at?: string }
+
+/** An ECG from the watch; `voltages` (µV at sampling_hz) only on GET /ecgs/{id}. */
+export interface ECG { id: number; at: string; date: string; duration_s: number; classification: string; avg_hr: number; symptoms_status: string; sampling_hz: number; voltages?: number[]; source: string; device: string }
+/** A hearing test: [Hz, left dB HL, right dB HL] per frequency. */
+export interface Audiogram { id: number; at: string; date: string; points: [number | null, number | null, number | null][]; source: string; device: string }

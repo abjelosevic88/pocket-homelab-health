@@ -55,7 +55,11 @@ func (s *Server) handleListMetrics(w http.ResponseWriter, r *http.Request) {
 	today := store.Today()
 	from := store.AddDays(today, -13)
 	out := []metricView{}
+	link := linkApp(ctx) != ""
 	add := func(m metrics.Metric) {
+		if link && metrics.Private(m.Key) {
+			return
+		}
 		v := metricView{Metric: m, Spark: []*float64{}}
 		if st, ok := have[m.Key]; ok {
 			v.Days, v.First, v.Last, v.Latest, v.Latest2 = st.Days, st.First, st.Last, st.Latest, st.Latest2
@@ -144,6 +148,10 @@ func (s *Server) handleMetric(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	uid := actorID(ctx)
 	key := chi.URLParam(r, "key")
+	if linkApp(ctx) != "" && metrics.Private(key) {
+		writeErr(w, http.StatusNotFound, "metric not found")
+		return
+	}
 	m := metrics.Get(key)
 	days := rangeDays(r.URL.Query().Get("range"))
 	to := r.URL.Query().Get("to")
@@ -631,6 +639,9 @@ func (s *Server) handleDay(w http.ResponseWriter, r *http.Request) {
 	}
 	numbers := map[string]any{}
 	for k, p := range vals {
+		if linkApp(ctx) != "" && metrics.Private(k) {
+			continue
+		}
 		m := metrics.Get(k)
 		numbers[k] = map[string]any{"value": metrics.Round(m, p.Value), "value2": p.Value2, "unit": m.Unit, "name": m.Name}
 	}

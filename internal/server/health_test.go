@@ -15,6 +15,7 @@ import (
 
 	"github.com/abjelosevic88/pocket-homelab-health/internal/config"
 	"github.com/abjelosevic88/pocket-homelab-health/internal/ingest"
+	"github.com/abjelosevic88/pocket-homelab-health/internal/metrics"
 	"github.com/abjelosevic88/pocket-homelab-health/internal/pocket"
 	"github.com/abjelosevic88/pocket-homelab-health/internal/store"
 )
@@ -557,5 +558,64 @@ func TestMetricsPageInBrowser(t *testing.T) {
 	}
 	if !strings.Contains(get(""), "pocket_health_info") {
 		t.Fatal("a scraper did not get the numbers")
+	}
+}
+
+func TestAppleRecordsIngest(t *testing.T) {
+	a := newApp(t, nil)
+	d := today()
+	body := map[string]any{
+		"samples": []map[string]any{
+			{"metric": "menstrual_flow", "at": d + "T08:00:00Z", "value": 2, "unit": "0–3", "note": "Medium"},
+			{"metric": "high_hr_events", "at": d + "T10:00:00Z", "value": 1, "unit": "count"},
+			{"metric": "vitamin_c", "at": d + "T12:00:00Z", "value": 80, "unit": "mg"},
+		},
+		"symptoms":   []map[string]any{{"name": "Headache", "at": d + "T09:00:00Z", "end": d + "T10:30:00Z", "severity": 3, "external_id": "S1"}},
+		"ecgs":       []map[string]any{{"at": d + "T11:00:00Z", "duration_s": 30, "classification": "sinus_rhythm", "avg_hr": 64, "sampling_hz": 128, "voltages": []float64{1, 2, 3}, "external_id": "E1"}},
+		"audiograms": []map[string]any{{"at": d + "T12:00:00Z", "points": [][]any{{1000, 15, 20}, {4000, nil, 30}}, "external_id": "A1"}},
+		"profile":    map[string]any{"birth_date": "1988-04-12", "sex": "male", "blood_type": "A+"},
+	}
+	for i := 0; i < 2; i++ { // sent twice: nothing doubles
+		res := a.ok(a.alice, "POST", "/api/v1/ingest?source=pocket-homelab", body)
+		if num(res, "symptoms") != 1 || num(res, "ecgs") != 1 || num(res, "audiograms") != 1 || num(res, "samples") != 3 {
+			t.Fatalf("res = %v", res)
+		}
+	}
+	_, _, syms := a.call(a.alice, "GET", "/api/v1/symptoms", nil)
+	if len(syms) != 1 || syms[0].(map[string]any)["name"] != "Headache" || num(syms[0].(map[string]any), "duration_min") != 90 {
+		t.Fatalf("symptoms = %v", syms)
+	}
+	_, _, ecgs := a.call(a.alice, "GET", "/api/v1/ecgs", nil)
+	if len(ecgs) != 1 || ecgs[0].(map[string]any)["voltages"] != nil {
+		t.Fatalf("ecgs = %v", ecgs)
+	}
+	e := a.ok(a.alice, "GET", fmt.Sprintf("/api/v1/ecgs/%d", int64(num(ecgs[0].(map[string]any), "id"))), nil)
+	if len(e["voltages"].([]any)) != 3 || e["classification"] != "sinus_rhythm" {
+		t.Fatalf("ecg = %v", e)
+	}
+	_, _, aud := a.call(a.alice, "GET", "/api/v1/audiograms", nil)
+	if len(aud) != 1 || len(aud[0].(map[string]any)["points"].([]any)) != 2 {
+		t.Fatalf("audiograms = %v", aud)
+	}
+	st := a.ok(a.alice, "GET", "/api/v1/settings", nil)
+	if st["birth_date"] != "1988-04-12" || st["sex"] != "male" || st["blood_type"] != "A+" {
+		t.Fatalf("settings = %v", st)
+	}
+	// a birth date typed in here is not replaced
+	a.ok(a.alice, "PUT", "/api/v1/settings", map[string]any{"birth_date": "1990-01-01"})
+	a.ok(a.alice, "POST", "/api/v1/ingest?source=pocket-homelab", map[string]any{"profile": map[string]any{"birth_date": "1988-04-12"}})
+	if st = a.ok(a.alice, "GET", "/api/v1/settings", nil); st["birth_date"] != "1990-01-01" {
+		t.Fatalf("birth date replaced: %v", st["birth_date"])
+	}
+	// removing the source takes the Apple records with it
+	a.ok(a.alice, "DELETE", "/api/v1/sources/pocket-homelab", nil)
+	_, _, syms = a.call(a.alice, "GET", "/api/v1/symptoms", nil)
+	_, _, ecgs = a.call(a.alice, "GET", "/api/v1/ecgs", nil)
+	if len(syms) != 0 || len(ecgs) != 0 {
+		t.Fatalf("left after source delete: %v %v", syms, ecgs)
+	}
+	a.expect(404, a.bob, "GET", fmt.Sprintf("/api/v1/ecgs/%d", int64(num(e, "id"))), nil)
+	if !metrics.Private("menstrual_flow") || metrics.Private("steps") {
+		t.Fatal("cycle metrics must be private")
 	}
 }

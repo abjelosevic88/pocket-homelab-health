@@ -18,6 +18,7 @@ import Sleep from './pages/Sleep'
 import Goals from './pages/Goals'
 import Medications from './pages/Medications'
 import Insights from './pages/Insights'
+import Records from './pages/Records'
 import Settings from './pages/Settings'
 
 function Gate({ children }: { children: React.ReactNode }) {
@@ -45,6 +46,7 @@ function App() {
         <Route path="/goals" element={<Goals />} />
         <Route path="/medications" element={<Medications />} />
         <Route path="/insights" element={<Insights />} />
+        <Route path="/records" element={<Records />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

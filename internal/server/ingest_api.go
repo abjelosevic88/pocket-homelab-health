@@ -18,12 +18,15 @@ import (
 
 // applyResult is what a push changed.
 type applyResult struct {
-	Samples  int      `json:"samples"`
-	Workouts int      `json:"workouts"`
-	Sleep    int      `json:"sleep"`
-	Skipped  int      `json:"skipped"`
-	Unknown  []string `json:"unknown,omitempty"`
-	Days     int      `json:"days"`
+	Samples    int      `json:"samples"`
+	Workouts   int      `json:"workouts"`
+	Sleep      int      `json:"sleep"`
+	Symptoms   int      `json:"symptoms,omitempty"`
+	ECGs       int      `json:"ecgs,omitempty"`
+	Audiograms int      `json:"audiograms,omitempty"`
+	Skipped    int      `json:"skipped"`
+	Unknown    []string `json:"unknown,omitempty"`
+	Days       int      `json:"days"`
 }
 
 // applyBatch writes a batch for a person, rolls the days up, checks goals,
@@ -50,6 +53,20 @@ func (s *Server) applyBatch(ctx context.Context, uid int64, b *ingest.Batch, sou
 		return nil, fmt.Errorf("sleep: %w", err)
 	}
 	res.Sleep = sn
+	if res.Symptoms, err = s.store.UpsertSymptomsFrom(ctx, uid, sourceLabel, b.Symptoms); err != nil {
+		return nil, fmt.Errorf("symptoms: %w", err)
+	}
+	if res.ECGs, err = s.store.UpsertECGs(ctx, uid, b.ECGs); err != nil {
+		return nil, fmt.Errorf("ecgs: %w", err)
+	}
+	if res.Audiograms, err = s.store.UpsertAudiograms(ctx, uid, b.Audiograms); err != nil {
+		return nil, fmt.Errorf("audiograms: %w", err)
+	}
+	if b.Profile != nil {
+		if err := s.applyProfile(ctx, uid, b.Profile); err != nil {
+			return nil, fmt.Errorf("profile: %w", err)
+		}
+	}
 	for _, ss := range b.Sleep {
 		touched.Merge(store.Touched{"sleep_asleep": {ss.Date: true}})
 	}
@@ -83,6 +100,36 @@ func (s *Server) applyBatch(ctx context.Context, uid int64, b *ingest.Batch, sou
 		s.log.Info("ingested", "user", uid, "source", sourceLabel, "samples", n, "workouts", wn, "sleep", sn, "skipped", b.Skipped)
 	}
 	return res, nil
+}
+
+// applyProfile fills what the person has not set themselves: birth date and
+// sex only when empty (a value typed in here wins); blood type, skin type and
+// wheelchair use follow Apple Health.
+func (s *Server) applyProfile(ctx context.Context, uid int64, p *ingest.Profile) error {
+	st, err := s.store.GetSettings(ctx, uid)
+	if err != nil {
+		return err
+	}
+	before := st
+	if st.BirthDate == "" && p.BirthDate != "" {
+		st.BirthDate = p.BirthDate
+	}
+	if st.Sex == "" && (p.Sex == "female" || p.Sex == "male" || p.Sex == "other") {
+		st.Sex = p.Sex
+	}
+	if p.BloodType != "" {
+		st.BloodType = p.BloodType
+	}
+	if p.SkinType != "" {
+		st.SkinType = p.SkinType
+	}
+	if p.Wheelchair != nil {
+		st.Wheelchair = *p.Wheelchair
+	}
+	if st.BirthDate == before.BirthDate && st.Sex == before.Sex && st.BloodType == before.BloodType && st.SkinType == before.SkinType && st.Wheelchair == before.Wheelchair {
+		return nil
+	}
+	return s.store.SaveUserSettings(ctx, uid, st)
 }
 
 func uniq(in []string) []string {

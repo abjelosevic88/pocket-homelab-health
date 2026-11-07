@@ -27,6 +27,7 @@ export default function Metrics() {
         <label className="check-row small"><Switch checked={all} onChange={setAll} label="Show every metric" size="sm" /><span>Show all</span></label>
         <button type="button" className="btn primary" onClick={() => openCreate('log')}><Icon name="plus" size={15} />Log</button>
       </>} />
+      <Link to="/records" className="callout info"><Icon name="heart" size={15} /><div><b>ECG & hearing</b> — recordings and hearing tests from Apple Health.</div></Link>
       <div className="scroll-x"><Segmented size="sm" value={cat} onChange={v => setCat(v as Category | 'all')} options={[{ value: 'all', label: 'All' }, ...cats.filter(c => list.some(m => m.category === c.key)).map(c => ({ value: c.key, label: c.name }))]} /></div>
       {groups.length === 0 && <p className="muted">Nothing yet. Connect your phone under Settings → Phone & imports, or switch on “Show all” and log something.</p>}
       {groups.map(g => (

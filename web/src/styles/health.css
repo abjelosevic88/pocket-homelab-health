@@ -326,6 +326,12 @@ a.list-row:hover { background: var(--surface-2); }
 .card-body.flush > .table th:first-child, .card-body.flush > .table td:first-child { padding-left: 18px; }
 .card-body.flush > .table th:last-child, .card-body.flush > .table td:last-child { padding-right: 18px; }
 
+/* an ECG on paper */
+.ecg-trace { display: block; background: color-mix(in srgb, #ef4444 4%, transparent); border-radius: 8px; }
+.ecg-trace .grid { stroke: color-mix(in srgb, #ef4444 14%, transparent); stroke-width: .5; }
+.ecg-trace .grid.major { stroke: color-mix(in srgb, #ef4444 30%, transparent); stroke-width: .8; }
+.ecg-trace .line { fill: none; stroke: var(--text); stroke-width: 1.2; stroke-linejoin: round; }
+
 /* insights */
 .ins-page { max-width: 1240px; }
 .chg-pill { display: inline-flex; align-items: center; gap: 2px; height: 20px; padding: 0 7px; border-radius: 999px; font-size: 11.5px; font-weight: 650;

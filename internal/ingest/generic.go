@@ -20,7 +20,11 @@ import (
 //	 "workouts": [{"kind": "running", "start": "…", "end": "…", "distance_m": 5100, "energy_kcal": 320,
 //	               "route": [[44.77, 17.19, 160, 0], …], "series": {"heart_rate": [[0, 92], …]},
 //	               "segments": [{"kind": "interval", "purpose": "work", "start_s": 600, "end_s": 690}]}],
-//	 "sleep": [{"start": "…", "end": "…", "asleep_min": 430, "deep_min": 60}]}
+//	 "sleep": [{"start": "…", "end": "…", "asleep_min": 430, "deep_min": 60}],
+//	 "symptoms": [{"name": "Headache", "at": "…", "severity": 3, "external_id": "…"}],
+//	 "ecgs": [{"at": "…", "classification": "sinus_rhythm", "avg_hr": 64, "sampling_hz": 128, "voltages": […], "external_id": "…"}],
+//	 "audiograms": [{"at": "…", "points": [[1000, 15, 20], …], "external_id": "…"}],
+//	 "profile": {"birth_date": "1988-04-12", "sex": "male", "blood_type": "A+"}}
 type Generic struct {
 	Samples []struct {
 		Metric string   `json:"metric"`
@@ -63,7 +67,34 @@ type Generic struct {
 		Effort          *float64               `json:"effort"`
 		EffortEstimated *float64               `json:"effort_estimated"`
 	} `json:"workouts"`
-	Sleep []struct {
+	// Symptoms another app recorded; external_id makes a second copy update the first.
+	Symptoms []struct {
+		Name       string `json:"name"`
+		At         string `json:"at"`
+		End        string `json:"end"`
+		Severity   int    `json:"severity"` // 1 mild … 5 severe
+		Note       string `json:"note"`
+		ExternalID string `json:"external_id"`
+	} `json:"symptoms"`
+	ECGs []struct {
+		At             string    `json:"at"`
+		DurationS      float64   `json:"duration_s"`
+		Classification string    `json:"classification"`
+		AvgHR          float64   `json:"avg_hr"`
+		SymptomsStatus string    `json:"symptoms_status"`
+		SamplingHz     float64   `json:"sampling_hz"`
+		Voltages       []float64 `json:"voltages"` // µV
+		Device         string    `json:"device"`
+		ExternalID     string    `json:"external_id"`
+	} `json:"ecgs"`
+	Audiograms []struct {
+		At         string        `json:"at"`
+		Points     [][3]*float64 `json:"points"` // [Hz, left dB HL, right dB HL]
+		Device     string        `json:"device"`
+		ExternalID string        `json:"external_id"`
+	} `json:"audiograms"`
+	Profile *Profile `json:"profile"`
+	Sleep   []struct {
 		Start     string  `json:"start"`
 		End       string  `json:"end"`
 		AsleepMin float64 `json:"asleep_min"`
@@ -158,6 +189,36 @@ func Pocket(raw []byte, source string) (*Batch, error) {
 		}
 		b.Workouts = append(b.Workouts, wo)
 	}
+	for _, x := range g.Symptoms {
+		at, ok := ParseTime(x.At)
+		if !ok || strings.TrimSpace(x.Name) == "" {
+			b.Skipped++
+			continue
+		}
+		sy := store.Symptom{Name: strings.TrimSpace(x.Name), Severity: x.Severity, At: RFC(at), Note: x.Note, ExternalID: x.ExternalID}
+		if e, ok := ParseTime(x.End); ok && e.After(at) {
+			sy.DurationMin = int(e.Sub(at).Minutes() + 0.5)
+		}
+		b.Symptoms = append(b.Symptoms, sy)
+	}
+	for _, x := range g.ECGs {
+		at, ok := ParseTime(x.At)
+		if !ok || x.ExternalID == "" {
+			b.Skipped++
+			continue
+		}
+		b.ECGs = append(b.ECGs, store.ECG{At: RFC(at), DurationS: x.DurationS, Classification: x.Classification, AvgHR: x.AvgHR, SymptomsStatus: x.SymptomsStatus,
+			SamplingHz: x.SamplingHz, Voltages: x.Voltages, Source: source, Device: x.Device, ExternalID: x.ExternalID})
+	}
+	for _, x := range g.Audiograms {
+		at, ok := ParseTime(x.At)
+		if !ok || x.ExternalID == "" {
+			b.Skipped++
+			continue
+		}
+		b.Audiograms = append(b.Audiograms, store.Audiogram{At: RFC(at), Points: x.Points, Source: source, Device: x.Device, ExternalID: x.ExternalID})
+	}
+	b.Profile = g.Profile
 	for _, x := range g.Sleep {
 		start, ok1 := ParseTime(x.Start)
 		end, ok2 := ParseTime(x.End)

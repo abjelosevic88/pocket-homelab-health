@@ -17,9 +17,23 @@ type Batch struct {
 	Samples  []store.Sample
 	Workouts []store.Workout
 	Sleep    []store.SleepSession
-	Skipped  int      // things we could not place
-	Unknown  []string // metric names kept generically
-	Notes    []string
+	// Records beside the numbers (the Pocket Homelab app sends them from Apple Health).
+	Symptoms   []store.Symptom
+	ECGs       []store.ECG
+	Audiograms []store.Audiogram
+	Profile    *Profile
+	Skipped    int      // things we could not place
+	Unknown    []string // metric names kept generically
+	Notes      []string
+}
+
+// Profile is what Apple Health knows about the person; empty fields are unknown.
+type Profile struct {
+	BirthDate  string `json:"birth_date"` // 1988-04-12
+	Sex        string `json:"sex"`        // female | male | other
+	BloodType  string `json:"blood_type"` // A+ … O-
+	SkinType   string `json:"skin_type"`  // I … VI
+	Wheelchair *bool  `json:"wheelchair"`
 }
 
 // Loc is the zone used for times that come without an offset.

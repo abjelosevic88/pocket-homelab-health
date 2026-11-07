@@ -281,6 +281,10 @@ func Get(key string) Metric {
 	return Metric{Key: key, Name: Title(key), Agg: Avg, Category: Other, Decimals: 1, Icon: "activity", Color: "#64748b"}
 }
 
+// Private metrics stay in the owner's own UI, like medications and symptoms:
+// another app reading through a link never gets them (cycle tracking).
+func Private(key string) bool { return Get(key).Category == Cycle }
+
 // Known reports whether the key is in the catalog.
 func Known(key string) bool { _, ok := byKey[key]; return ok }
 

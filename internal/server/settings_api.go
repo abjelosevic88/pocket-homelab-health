@@ -41,6 +41,7 @@ func (s *Server) publicSettings(ctx context.Context, u *store.User, st store.Set
 	out := map[string]any{
 		"core_configured": s.core.Configured(), "core_registered": s.coreStatus()["registered"],
 		"title": st.Title, "units": st.Units, "height_cm": st.HeightCm, "birth_date": st.BirthDate, "sex": st.Sex,
+		"blood_type": st.BloodType, "skin_type": st.SkinType, "wheelchair": st.Wheelchair,
 		"date_format": st.DateFormat, "time_format": st.TimeFormat, "week_start": st.WeekStart, "home_metrics": st.HomeMetrics,
 		"notify_url": st.NotifyURL, "notify_format": st.NotifyFormat, "notify_goals": st.NotifyGoals, "notify_weekly": st.NotifyWeekly,
 		"notify_meds": st.NotifyMeds, "notify_inactive": st.NotifyInactive, "notify_hour": st.NotifyHour, "weekly_day": st.WeeklyDay, "notify_configured": st.NotifyURL != "",
@@ -110,6 +111,15 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if keys["sex"] && (in.Sex == "" || in.Sex == "female" || in.Sex == "male" || in.Sex == "other") {
 		cur.Sex = in.Sex
+	}
+	if keys["blood_type"] && (in.BloodType == "" || validBloodType(in.BloodType)) {
+		cur.BloodType = in.BloodType
+	}
+	if keys["skin_type"] && (in.SkinType == "" || strings.Contains(" I II III IV V VI ", " "+in.SkinType+" ")) {
+		cur.SkinType = in.SkinType
+	}
+	if keys["wheelchair"] {
+		cur.Wheelchair = in.Wheelchair
 	}
 	if keys["date_format"] {
 		cur.DateFormat = in.DateFormat
@@ -536,4 +546,12 @@ func (s *Server) handleImportJSON(w http.ResponseWriter, r *http.Request) {
 	}
 	s.checkGoals(ctx, uid, touched)
 	writeJSON(w, http.StatusOK, counts)
+}
+
+func validBloodType(v string) bool {
+	switch v {
+	case "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-":
+		return true
+	}
+	return false
 }

@@ -20,6 +20,10 @@ Returns `{"samples": n, "workouts": n, "sleep": n, "skipped": n, "unknown": [...
                 "series": {"heart_rate": [[0, 98], [5, 112]], "speed": [[0, 3.1], [5, 3.4]], "distance": [[0, 0], [5, 16]]},
                 "segments": [{"kind": "interval", "purpose": "work", "label": "Work 1", "goal": "400 m", "start_s": 600, "end_s": 690}],
                 "effort": 7, "effort_estimated": 6}],
+  "symptoms": [{"name": "Headache", "at": "2025-10-23T09:00:00+02:00", "end": "2025-10-23T11:00:00+02:00", "severity": 3, "external_id": "…"}],
+  "ecgs": [{"at": "…", "duration_s": 30, "classification": "sinus_rhythm", "avg_hr": 64, "symptoms_status": "none", "sampling_hz": 128, "voltages": [12, 15, …], "external_id": "…"}],
+  "audiograms": [{"at": "…", "points": [[1000, 15, 20], [4000, 25, null]], "external_id": "…"}],
+  "profile": {"birth_date": "1988-04-12", "sex": "male", "blood_type": "A+", "skin_type": "III", "wheelchair": false},
   "sleep":    [{"start": "2025-10-22T23:10:00+02:00", "end": "2025-10-23T06:40:00+02:00", "asleep_min": 408, "deep_min": 66, "rem_min": 84, "core_min": 258, "awake_min": 42}]
 }
 ```
@@ -54,6 +58,7 @@ Same fields as above, one at a time. `PUT/DELETE /workouts/{id}`, `POST /workout
 - `GET /sleep?range=|from&to&limit`.
 - `GET /goals` — with today's value, percent, met, streaks, days met of the last 30. `PUT /goals/{metric} {"target", "direction": "at_least"|"at_most", "active"}`, `DELETE /goals/{metric}`.
 - `GET /medications[?all=1]`, `POST /medications`, `PUT/DELETE /medications/{id}`, `GET /medications/day/{date}` (slots with status), `POST /medications/{id}/log {"date","slot","status":"taken"|"skipped","taken_at","note"}` (`slot` empty = an extra dose), `DELETE /medications/log/{id}`, `GET /medications/log?from&to`.
+- `GET /ecgs` (newest first, without traces), `GET /ecgs/{id}` (with `voltages` in µV at `sampling_hz`), `GET /audiograms` (`points`: `[Hz, left dB HL, right dB HL]`). Owner only, like symptoms.
 - `GET /symptoms?range|from&to&limit`, `POST /symptoms {"name","severity":1-5,"at","duration_min","note","tags"}`, `PUT/DELETE /symptoms/{id}`, `GET /symptoms/names`.
 - `GET /rules`, `POST /rules {"trigger":"workout"|"goal","match":"any"|kind|metric,"habit_id","habit_name"}`, `PUT/DELETE /rules/{id}`, `GET /habits/list` (habits from Pocket Habits through the connection in effect), `POST /habits/mark-now`.
 - `GET /insights?range=` — trends, weekday patterns, workouts, sleep regularity, correlations, weather split, goals.

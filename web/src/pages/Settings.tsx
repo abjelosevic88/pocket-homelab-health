@@ -138,6 +138,9 @@ function General() {
         <SettingRow title="Height" help={imp ? 'inches' : 'cm'}><input type="number" step="0.1" value={imp ? (f.height_cm ? +(f.height_cm / 2.54).toFixed(1) : '') : (f.height_cm || '')} onChange={e => setF({ ...f, height_cm: imp ? Number(e.target.value) * 2.54 : Number(e.target.value) })} className="set-time" /></SettingRow>
         <SettingRow title="Birth date"><input type="date" value={f.birth_date} onChange={e => setF({ ...f, birth_date: e.target.value })} /></SettingRow>
         <SettingRow title="Sex"><Select value={f.sex} onChange={v => setF({ ...f, sex: v })} options={[{ value: 'female', label: 'Female' }, { value: 'male', label: 'Male' }, { value: 'other', label: 'Other' }]} placeholder="Not set" clearLabel="Not set" /></SettingRow>
+        <SettingRow title="Blood type" help="Apple Health fills this in when it knows"><Select value={f.blood_type} onChange={v => setF({ ...f, blood_type: v })} options={['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(v => ({ value: v, label: v }))} placeholder="Not set" clearLabel="Not set" /></SettingRow>
+        <SettingRow title="Skin type" help="Fitzpatrick I (always burns) to VI (never burns)"><Select value={f.skin_type} onChange={v => setF({ ...f, skin_type: v })} options={['I', 'II', 'III', 'IV', 'V', 'VI'].map(v => ({ value: v, label: `Type ${v}` }))} placeholder="Not set" clearLabel="Not set" /></SettingRow>
+        <SettingRow title="Wheelchair" help="Apple Health counts pushes instead of steps"><Switch checked={!!f.wheelchair} onChange={v => setF({ ...f, wheelchair: v })} label="Wheelchair" size="sm" /></SettingRow>
       </Section>
       <Section title="Today tiles" icon="grid" sub="Which numbers Today shows first, in this order. Tap to add or remove.">
         <div className="row wrap" style={{ gap: 6 }}>
