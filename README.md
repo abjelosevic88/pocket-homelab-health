@@ -64,7 +64,7 @@ docker run -d --name pocket-health -p 8080:8080 -v ./data:/data \
   ghcr.io/abjelosevic88/pocket-homelab-health:latest
 ```
 
-or `docker compose up -d` with [docker-compose.yml](docker-compose.yml). Open it, create the first account, then Settings → Phone & imports. All options: [docs/configuration.md](docs/configuration.md). API: [docs/api.md](docs/api.md).
+or `docker compose up -d` with [docker-compose.yml](docker-compose.yml). Open it, create the first account, then Settings → Phone & imports. All options: [docs/configuration.md](docs/configuration.md). API: [docs/api.md](docs/api.md). Syncing from the iPhone away from home over Tailscale or WireGuard needs https: [docs/https-over-vpn.md](docs/https-over-vpn.md).
 
 ## With Pocket Core
 
