@@ -32,6 +32,8 @@ span.block { display: block; }
 a.list-row:hover { background: var(--surface-2); }
 .list-ico { width: 32px; height: 32px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; background: var(--surface-2); color: var(--accent); flex-shrink: 0; }
 .day-h { padding: 10px 18px 4px; font-size: 12px; font-weight: 600; color: var(--muted); border-top: 1px solid var(--border); }
+/* the first group in a card needs no line or gap above it */
+.card-body > .day-h:first-child, .card-body > :first-child > .day-h:first-child { border-top: 0; padding-top: 14px; }
 .night-date { width: 54px; flex-shrink: 0; }
 .night .stacked { margin-top: 6px; }
 .sev { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0; }
@@ -79,7 +81,8 @@ a.list-row:hover { background: var(--surface-2); }
 .bars-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; gap: 4px; }
 .bars-bar { width: 100%; max-width: 44px; border-radius: 5px 5px 2px 2px; min-height: 2px; transition: height .3s; }
 .bars-val { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.bars-lbl { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.bars-lbl { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; line-height: 15px; flex-shrink: 0; }
+.bars-val { line-height: 14px; flex-shrink: 0; }
 
 /* metrics page */
 .metric-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
@@ -316,3 +319,9 @@ a.list-row:hover { background: var(--surface-2); }
 .wo-habits-row p { margin: 2px 0 0; }
 .wo-habits-chips { margin-top: 12px; padding-left: 44px; }
 @media (max-width: 767px) { .table.parts .pace-col { min-width: 140px; width: auto; } .pace-cell .tnum { min-width: 0; } }
+
+/* a flush card with no title above starts right at its content */
+.card > .card-body.flush:first-child { padding-top: 0; }
+/* a table flush in a card lines up with the card's title */
+.card-body.flush > .table th:first-child, .card-body.flush > .table td:first-child { padding-left: 18px; }
+.card-body.flush > .table th:last-child, .card-body.flush > .table td:last-child { padding-right: 18px; }

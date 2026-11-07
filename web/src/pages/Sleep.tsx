@@ -34,9 +34,9 @@ export default function Sleep() {
       <PageHeader title="Sleep" sub={nights.length ? `${nights.length} nights · ${fmtMinutes(avg)} asleep on average${deep ? ` · deep ${fmtMinutes(deep)}` : ''}${rem ? ` · REM ${fmtMinutes(rem)}` : ''}` : 'No nights yet'}
         actions={<button type="button" className="btn primary" onClick={() => openCreate('sleep')}><Icon name="plus" size={15} />Add a night</button>} />
       <div className="scroll-x"><Segmented size="sm" value={range} onChange={v => setSp({ range: v })} options={RANGES.map(r => ({ value: r.id, label: r.label }))} /></div>
-      <section className="card"><div className="card-body">
-        {page.points.length === 0 ? <p className="muted">No sleep in this range.</p> : <LineChart points={pts} kind="bar" color="#6366f1" goal={page.goal?.target} goalLabel={page.goal ? `goal ${fmtMinutes(page.goal.target)}` : undefined} format={v => fmtMinutes(v)} zero avg={avg} height={200} />}
-      </div></section>
+      {page.points.length > 0 && <section className="card"><div className="card-body">
+        <LineChart points={pts} kind="bar" color="#6366f1" goal={page.goal?.target} goalLabel={page.goal ? `goal ${fmtMinutes(page.goal.target)}` : undefined} format={v => fmtMinutes(v)} zero avg={avg} height={200} />
+      </div></section>}
       {nights.length === 0 ? <Empty title="No nights recorded" icon="moon">Sleep arrives with the phone sync, or <button type="button" className="link-btn" onClick={() => openCreate('sleep')}>add one by hand</button>.</Empty> : (
         <section className="card"><div className="card-body flush">
           <ul className="list">{nights.map(n => (

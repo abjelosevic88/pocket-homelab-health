@@ -536,3 +536,26 @@ func TestDropAutoSplits(t *testing.T) {
 		t.Fatalf("single segment dropped: %+v", one)
 	}
 }
+
+func TestMetricsPageInBrowser(t *testing.T) {
+	a := newApp(t, func(c *config.Config) { c.MetricsEnabled = true })
+	get := func(accept string) string {
+		req, _ := http.NewRequest("GET", a.url+"/metrics", nil)
+		if accept != "" {
+			req.Header.Set("Accept", accept)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return string(b)
+	}
+	if strings.Contains(get("text/html,application/xhtml+xml"), "pocket_health_info") {
+		t.Fatal("a browser got the scrape output instead of the page")
+	}
+	if !strings.Contains(get(""), "pocket_health_info") {
+		t.Fatal("a scraper did not get the numbers")
+	}
+}

@@ -35,6 +35,7 @@ const (
 	Mobility  Category = "mobility"
 	Mind      Category = "mind"
 	Hearing   Category = "hearing"
+	Cycle     Category = "cycle"
 	Other     Category = "other"
 )
 
@@ -162,6 +163,85 @@ var Catalog = []Metric{
 	{Key: "sexual_activity", Name: "Sexual activity", Unit: "count", Agg: Sum, Category: Other, Icon: "heart", Color: "#ec4899", Manual: true, hae: []string{"sexual_activity"}, apple: []string{"SexualActivity"}},
 	{Key: "basal_body_temp", Name: "Basal body temperature", Unit: "°C", Imperial: "°F", Agg: Avg, Category: Other, Decimals: 2, Icon: "thermometer", Color: "#ec4899", Manual: true, hae: []string{"basal_body_temperature"}, apple: []string{"BasalBodyTemperature"}},
 	{Key: "electrodermal", Name: "Electrodermal activity", Unit: "µS", Agg: Avg, Category: Other, Decimals: 2, Icon: "zap", Color: "#64748b", hae: []string{"electrodermal_activity"}, apple: []string{"ElectrodermalActivity"}},
+	// ---- read from Apple Health since 0.5.0 ----
+	{Key: "hrv_rmssd", Name: "HRV (RMSSD)", Unit: "ms", Agg: Avg, Category: Heart, Icon: "activity", Color: "#a855f7", HigherIsBetter: yes(), apple: []string{"HeartRateVariabilityRMSSD"}},
+	{Key: "move_min", Name: "Move minutes", Unit: "min", Agg: Sum, Category: Activity, Icon: "timer", Color: "#ef4444", HigherIsBetter: yes(), GoalDir: "at_least", apple: []string{"AppleMoveTime"}},
+	{Key: "move_goal", Name: "Move goal", Unit: "kcal", Agg: Last, Category: Activity, Icon: "target", Color: "#ef4444"},
+	{Key: "exercise_goal", Name: "Exercise goal", Unit: "min", Agg: Last, Category: Activity, Icon: "target", Color: "#22c55e"},
+	{Key: "stand_goal", Name: "Stand goal", Unit: "h", Agg: Last, Category: Activity, Icon: "target", Color: "#06b6d4"},
+	{Key: "nike_fuel", Name: "NikeFuel", Unit: "count", Agg: Sum, Category: Activity, Icon: "zap", Color: "#f97316", apple: []string{"NikeFuel"}},
+	{Key: "breathing_disturbances", Name: "Breathing disturbances", Unit: "count", Agg: Avg, Category: SleepCat, Decimals: 1, Icon: "lungs", Color: "#6366f1", HigherIsBetter: no(), apple: []string{"AppleSleepingBreathingDisturbances"}},
+	{Key: "walking_steadiness", Name: "Walking steadiness", Unit: "%", Agg: Last, Category: Mobility, Icon: "footprints", Color: "#14b8a6", HigherIsBetter: yes(), apple: []string{"AppleWalkingSteadiness"}},
+	{Key: "xc_ski_speed", Name: "Cross-country skiing speed", Unit: "km/h", Imperial: "mph", Agg: Avg, Category: Mobility, Decimals: 1, Icon: "gauge", Color: "#0ea5e9", apple: []string{"CrossCountrySkiingSpeed"}},
+	{Key: "paddle_speed", Name: "Paddling speed", Unit: "km/h", Imperial: "mph", Agg: Avg, Category: Mobility, Decimals: 1, Icon: "gauge", Color: "#0ea5e9", apple: []string{"PaddleSportsSpeed"}},
+	{Key: "rowing_speed", Name: "Rowing speed", Unit: "km/h", Imperial: "mph", Agg: Avg, Category: Mobility, Decimals: 1, Icon: "gauge", Color: "#0ea5e9", apple: []string{"RowingSpeed"}},
+	{Key: "blood_alcohol", Name: "Blood alcohol", Unit: "%", Agg: Max, Category: Vitals, Decimals: 3, Icon: "glass", Color: "#a855f7", Manual: true, HigherIsBetter: no(), apple: []string{"BloodAlcoholContent"}},
+	{Key: "fvc", Name: "Forced vital capacity", Unit: "L", Agg: Last, Category: Vitals, Decimals: 2, Icon: "lungs", Color: "#3b82f6", Manual: true, HigherIsBetter: yes(), apple: []string{"ForcedVitalCapacity"}},
+	{Key: "fev1", Name: "FEV1", Unit: "L", Agg: Last, Category: Vitals, Decimals: 2, Icon: "lungs", Color: "#3b82f6", Manual: true, HigherIsBetter: yes(), apple: []string{"ForcedExpiratoryVolume1"}},
+	{Key: "perfusion_index", Name: "Perfusion index", Unit: "%", Agg: Avg, Category: Vitals, Decimals: 1, Icon: "droplet", Color: "#3b82f6", apple: []string{"PeripheralPerfusionIndex"}},
+	{Key: "water_temp", Name: "Water temperature", Unit: "°C", Imperial: "°F", Agg: Avg, Category: Other, Decimals: 1, Icon: "thermometer", Color: "#0ea5e9", apple: []string{"WaterTemperature"}},
+	{Key: "underwater_depth", Name: "Underwater depth", Unit: "m", Imperial: "ft", Agg: Max, Category: Other, Decimals: 1, Icon: "swim", Color: "#0ea5e9", apple: []string{"UnderwaterDepth"}},
+	{Key: "sound_reduction", Name: "Sound reduction", Unit: "dB", Agg: Avg, Category: Hearing, Icon: "headphones", Color: "#64748b", apple: []string{"EnvironmentalSoundReduction"}},
+	{Key: "state_of_mind", Name: "State of mind", Unit: "−1…1", Agg: Avg, Category: Mind, Decimals: 2, Icon: "smile", Color: "#06b6d4", HigherIsBetter: yes()},
+	// notifications the watch or phone raised, counted per day
+	{Key: "high_hr_events", Name: "High heart rate notifications", Unit: "count", Agg: Sum, Category: Heart, Icon: "heart", Color: "#ef4444", HigherIsBetter: no(), apple: []string{"HighHeartRateEvent"}},
+	{Key: "low_hr_events", Name: "Low heart rate notifications", Unit: "count", Agg: Sum, Category: Heart, Icon: "heart", Color: "#ef4444", HigherIsBetter: no(), apple: []string{"LowHeartRateEvent"}},
+	{Key: "irregular_rhythm_events", Name: "Irregular rhythm notifications", Unit: "count", Agg: Sum, Category: Heart, Icon: "heart", Color: "#ef4444", HigherIsBetter: no(), apple: []string{"IrregularHeartRhythmEvent"}},
+	{Key: "hypertension_events", Name: "Hypertension notifications", Unit: "count", Agg: Sum, Category: Heart, Icon: "heart", Color: "#ef4444", HigherIsBetter: no(), apple: []string{"HypertensionEvent"}},
+	{Key: "low_cardio_fitness_events", Name: "Low cardio fitness notifications", Unit: "count", Agg: Sum, Category: Heart, Icon: "heart", Color: "#ef4444", HigherIsBetter: no(), apple: []string{"LowCardioFitnessEvent"}},
+	{Key: "sleep_apnea_events", Name: "Sleep apnea notifications", Unit: "count", Agg: Sum, Category: SleepCat, Icon: "bed", Color: "#ef4444", HigherIsBetter: no(), apple: []string{"SleepApneaEvent"}},
+	{Key: "steadiness_events", Name: "Walking steadiness notifications", Unit: "count", Agg: Sum, Category: Mobility, Icon: "footprints", Color: "#ef4444", HigherIsBetter: no(), apple: []string{"AppleWalkingSteadinessEvent"}},
+	{Key: "env_audio_events", Name: "Loud environment notifications", Unit: "count", Agg: Sum, Category: Hearing, Icon: "ear", Color: "#ef4444", HigherIsBetter: no(), apple: []string{"EnvironmentalAudioExposureEvent"}},
+	{Key: "headphone_audio_events", Name: "Loud headphone notifications", Unit: "count", Agg: Sum, Category: Hearing, Icon: "headphones", Color: "#ef4444", HigherIsBetter: no(), apple: []string{"HeadphoneAudioExposureEvent"}},
+	// nutrition beyond the basics
+	{Key: "cholesterol", Name: "Cholesterol", Unit: "mg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, HigherIsBetter: no(), apple: []string{"DietaryCholesterol"}},
+	{Key: "fat_saturated", Name: "Saturated fat", Unit: "g", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, HigherIsBetter: no(), apple: []string{"DietaryFatSaturated"}},
+	{Key: "fat_mono", Name: "Monounsaturated fat", Unit: "g", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryFatMonounsaturated"}},
+	{Key: "fat_poly", Name: "Polyunsaturated fat", Unit: "g", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryFatPolyunsaturated"}},
+	{Key: "calcium", Name: "Calcium", Unit: "mg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryCalcium"}},
+	{Key: "iron", Name: "Iron", Unit: "mg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryIron"}},
+	{Key: "potassium", Name: "Potassium", Unit: "mg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryPotassium"}},
+	{Key: "magnesium", Name: "Magnesium", Unit: "mg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryMagnesium"}},
+	{Key: "phosphorus", Name: "Phosphorus", Unit: "mg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryPhosphorus"}},
+	{Key: "zinc", Name: "Zinc", Unit: "mg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryZinc"}},
+	{Key: "copper", Name: "Copper", Unit: "mg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryCopper"}},
+	{Key: "manganese", Name: "Manganese", Unit: "mg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryManganese"}},
+	{Key: "chloride", Name: "Chloride", Unit: "mg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryChloride"}},
+	{Key: "selenium", Name: "Selenium", Unit: "µg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietarySelenium"}},
+	{Key: "iodine", Name: "Iodine", Unit: "µg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryIodine"}},
+	{Key: "chromium", Name: "Chromium", Unit: "µg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryChromium"}},
+	{Key: "molybdenum", Name: "Molybdenum", Unit: "µg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryMolybdenum"}},
+	{Key: "vitamin_a", Name: "Vitamin A", Unit: "µg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryVitaminA"}},
+	{Key: "vitamin_b6", Name: "Vitamin B6", Unit: "mg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryVitaminB6"}},
+	{Key: "vitamin_b12", Name: "Vitamin B12", Unit: "µg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryVitaminB12"}},
+	{Key: "vitamin_c", Name: "Vitamin C", Unit: "mg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryVitaminC"}},
+	{Key: "vitamin_d", Name: "Vitamin D", Unit: "µg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryVitaminD"}},
+	{Key: "vitamin_e", Name: "Vitamin E", Unit: "mg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryVitaminE"}},
+	{Key: "vitamin_k", Name: "Vitamin K", Unit: "µg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryVitaminK"}},
+	{Key: "thiamin", Name: "Thiamin (B1)", Unit: "mg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryThiamin"}},
+	{Key: "riboflavin", Name: "Riboflavin (B2)", Unit: "mg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryRiboflavin"}},
+	{Key: "niacin", Name: "Niacin (B3)", Unit: "mg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryNiacin"}},
+	{Key: "pantothenic_acid", Name: "Pantothenic acid (B5)", Unit: "mg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryPantothenicAcid"}},
+	{Key: "biotin", Name: "Biotin (B7)", Unit: "µg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryBiotin"}},
+	{Key: "folate", Name: "Folate (B9)", Unit: "µg", Agg: Sum, Category: Nutrition, Decimals: 1, Icon: "utensils", Color: "#84cc16", Manual: true, apple: []string{"DietaryFolate"}},
+	// cycle tracking: a level or a count per day, what was recorded in the note
+	{Key: "menstrual_flow", Name: "Menstrual flow", Unit: "0–3", Agg: Max, Category: Cycle, Icon: "droplet", Color: "#ec4899", apple: []string{"MenstrualFlow"}},
+	{Key: "spotting", Name: "Spotting", Unit: "count", Agg: Sum, Category: Cycle, Icon: "calendar", Color: "#ec4899", apple: []string{"IntermenstrualBleeding"}},
+	{Key: "ovulation_test", Name: "Ovulation test", Unit: "count", Agg: Sum, Category: Cycle, Icon: "calendar", Color: "#ec4899", apple: []string{"OvulationTestResult"}},
+	{Key: "pregnancy_test", Name: "Pregnancy test", Unit: "count", Agg: Sum, Category: Cycle, Icon: "calendar", Color: "#ec4899", apple: []string{"PregnancyTestResult"}},
+	{Key: "progesterone_test", Name: "Progesterone test", Unit: "count", Agg: Sum, Category: Cycle, Icon: "calendar", Color: "#ec4899", apple: []string{"ProgesteroneTestResult"}},
+	{Key: "contraceptive", Name: "Contraceptive", Unit: "count", Agg: Sum, Category: Cycle, Icon: "calendar", Color: "#ec4899", apple: []string{"Contraceptive"}},
+	{Key: "pregnancy", Name: "Pregnancy", Unit: "count", Agg: Sum, Category: Cycle, Icon: "calendar", Color: "#ec4899", apple: []string{"Pregnancy"}},
+	{Key: "lactation", Name: "Lactation", Unit: "count", Agg: Sum, Category: Cycle, Icon: "calendar", Color: "#ec4899", apple: []string{"Lactation"}},
+	{Key: "bleeding_during_pregnancy", Name: "Bleeding during pregnancy", Unit: "count", Agg: Sum, Category: Cycle, Icon: "calendar", Color: "#ec4899", apple: []string{"BleedingDuringPregnancy"}},
+	{Key: "bleeding_after_pregnancy", Name: "Bleeding after pregnancy", Unit: "count", Agg: Sum, Category: Cycle, Icon: "calendar", Color: "#ec4899", apple: []string{"BleedingAfterPregnancy"}},
+	{Key: "bleeding_after_menopause", Name: "Bleeding after menopause", Unit: "count", Agg: Sum, Category: Cycle, Icon: "calendar", Color: "#ec4899", apple: []string{"BleedingAfterMenopause"}},
+	{Key: "menopause", Name: "Menopause", Unit: "count", Agg: Sum, Category: Cycle, Icon: "calendar", Color: "#ec4899", apple: []string{"MenopausalState"}},
+	{Key: "irregular_cycle_events", Name: "Irregular cycle notifications", Unit: "count", Agg: Sum, Category: Cycle, Icon: "calendar", Color: "#ec4899", apple: []string{"IrregularMenstrualCycles"}},
+	{Key: "infrequent_cycle_events", Name: "Infrequent cycle notifications", Unit: "count", Agg: Sum, Category: Cycle, Icon: "calendar", Color: "#ec4899", apple: []string{"InfrequentMenstrualCycles"}},
+	{Key: "prolonged_period_events", Name: "Prolonged period notifications", Unit: "count", Agg: Sum, Category: Cycle, Icon: "calendar", Color: "#ec4899", apple: []string{"ProlongedMenstrualPeriods"}},
+	{Key: "persistent_spotting_events", Name: "Persistent spotting notifications", Unit: "count", Agg: Sum, Category: Cycle, Icon: "calendar", Color: "#ec4899", apple: []string{"PersistentIntermenstrualBleeding"}},
+	{Key: "cervical_mucus", Name: "Cervical mucus", Unit: "1–5", Agg: Last, Category: Cycle, Icon: "droplet", Color: "#ec4899", apple: []string{"CervicalMucusQuality"}},
 }
 
 // CategoryNames in display order.
@@ -170,7 +250,7 @@ var CategoryNames = []struct {
 	Name string   `json:"name"`
 }{
 	{Activity, "Activity"}, {Body, "Body"}, {Heart, "Heart"}, {Vitals, "Vitals"}, {SleepCat, "Sleep"},
-	{Nutrition, "Nutrition"}, {Mobility, "Mobility & running"}, {Mind, "Mind"}, {Hearing, "Hearing"}, {Other, "Other"},
+	{Nutrition, "Nutrition"}, {Mobility, "Mobility & running"}, {Mind, "Mind"}, {Hearing, "Hearing"}, {Cycle, "Cycle tracking"}, {Other, "Other"},
 }
 
 var byKey = map[string]*Metric{}

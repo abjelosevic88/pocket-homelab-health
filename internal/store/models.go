@@ -205,7 +205,10 @@ type Symptom struct {
 	DurationMin int    `json:"duration_min"`
 	Note        string `json:"note"`
 	Tags        string `json:"tags"`
-	CreatedAt   string `json:"created_at"`
+	// Set for one another app recorded (Apple Health): where from and its id there.
+	Source     string `json:"source,omitempty"`
+	ExternalID string `json:"-"`
+	CreatedAt  string `json:"created_at"`
 }
 
 // HabitRule ticks a Pocket Habits habit when something happens here.
@@ -244,13 +247,17 @@ type Settings struct {
 	Title         string `json:"title"`
 	SetupComplete bool   `json:"setup_complete"`
 
-	Units      string  `json:"units"` // metric | imperial
-	HeightCm   float64 `json:"height_cm"`
-	BirthDate  string  `json:"birth_date"`
-	Sex        string  `json:"sex"` // "" | female | male | other
-	DateFormat string  `json:"date_format"`
-	TimeFormat string  `json:"time_format"`
-	WeekStart  int     `json:"week_start"` // 1 = Monday, 7 = Sunday
+	Units     string  `json:"units"` // metric | imperial
+	HeightCm  float64 `json:"height_cm"`
+	BirthDate string  `json:"birth_date"`
+	Sex       string  `json:"sex"` // "" | female | male | other
+	// From Apple Health's profile when the phone sends it.
+	BloodType  string `json:"blood_type"` // "" | A+ | A- | B+ | B- | AB+ | AB- | O+ | O-
+	SkinType   string `json:"skin_type"`  // "" | I … VI (Fitzpatrick)
+	Wheelchair bool   `json:"wheelchair"`
+	DateFormat string `json:"date_format"`
+	TimeFormat string `json:"time_format"`
+	WeekStart  int    `json:"week_start"` // 1 = Monday, 7 = Sunday
 	// Dashboard tiles on Home, in order (metric keys).
 	HomeMetrics []string `json:"home_metrics"`
 

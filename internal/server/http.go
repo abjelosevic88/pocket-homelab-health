@@ -288,6 +288,12 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	// /metrics is also the web UI's Metrics page: a browser opening or
+	// reloading it gets the page, a scraper gets the numbers
+	if strings.Contains(r.Header.Get("Accept"), "text/html") {
+		s.handleSPA(w, r)
+		return
+	}
 	ctx := r.Context()
 	counts := s.store.Counts(ctx)
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")

@@ -497,8 +497,14 @@ func (s *Store) DeleteSource(ctx context.Context, uid int64, source string) (int
 	if _, err := s.DB.ExecContext(ctx, `DELETE FROM workouts WHERE user_id = ? AND source = ?`, uid, source); err != nil {
 		return n, err
 	}
-	if _, err := s.DB.ExecContext(ctx, `DELETE FROM sleep_sessions WHERE user_id = ? AND source = ?`, uid, source); err != nil {
-		return n, err
+	for _, table := range []string{"sleep_sessions", "symptoms", "ecgs", "audiograms"} {
+		q := `DELETE FROM ` + table + ` WHERE user_id = ? AND source = ?`
+		if table == "symptoms" {
+			q += ` AND external_id <> ''` // ones typed in here stay
+		}
+		if _, err := s.DB.ExecContext(ctx, q, uid, source); err != nil {
+			return n, err
+		}
 	}
 	return n, nil
 }

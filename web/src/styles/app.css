@@ -140,6 +140,8 @@
 .page-header h1 { font-size: 22px; letter-spacing: -.02em; }
 .page-header .sub { color: var(--muted); margin-top: 3px; }
 .page-header .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* inside a stack the stack's gap is the spacing; a margin on top of it leaves a hole */
+.stack > .page-header { margin-bottom: 0; }
 @media (max-width: 767px) {
   .content-inner { padding: 16px 14px calc(100px + env(safe-area-inset-bottom)); }
   .page-header { margin-bottom: 14px; }

@@ -157,7 +157,8 @@ export function Bars({ items, color = 'var(--accent)', format = nice, height = 1
       {items.map(it => (
         <div key={it.label} className="bars-col" title={`${it.label}: ${format(it.value)}${it.hint ? ' · ' + it.hint : ''}`}>
           <span className="bars-val">{it.value ? format(it.value) : ''}</span>
-          <span className="bars-bar" style={{ height: `${(it.value / max) * 100}%`, background: color }} />
+          {/* the bar shares the column with its value and label, so it scales within what is left */}
+          <span className="bars-bar" style={{ height: `calc((100% - 38px) * ${(it.value / max).toFixed(4)})`, background: color }} />
           <span className="bars-lbl">{it.label}</span>
         </div>
       ))}
