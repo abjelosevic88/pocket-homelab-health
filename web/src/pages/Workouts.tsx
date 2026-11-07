@@ -14,57 +14,93 @@ import { clock, cumulative, speeds as trackSpeeds, thin } from '../lib/track'
 import { ChartCard, EffortMeter, PartsTable, SeriesCharts, WorkoutSummary, speedText, type BigStat, type MinorStat } from '../components/WorkoutDetail'
 import { openCreate, useCatalog, useCrumb, useOnChange } from '../components/Layout'
 
+// a colour per kind of workout, so a list of them reads at a glance
+const KIND_COLOR: Record<string, string> = { running: '#f97316', walking: '#22c55e', hiking: '#16a34a', cycling: '#06b6d4', swimming: '#3b82f6', strength: '#a855f7', functional: '#a855f7', cross_training: '#a855f7', core: '#a855f7', hiit: '#ef4444', yoga: '#ec4899', pilates: '#ec4899', stretching: '#ec4899', mind_body: '#8b5cf6', cooldown: '#64748b' }
+export const kindColor = (k: string) => KIND_COLOR[k] || '#e11d48'
+const ON_FOOT = new Set(['running', 'walking', 'hiking'])
+
 export default function Workouts() {
   const [sp, setSp] = useSearchParams()
-  const catalog = useCatalog()
   const range = sp.get('range') || 'm'
   const kind = sp.get('kind') || ''
   const [stats, setStats] = useState<WorkoutStats | null>(null)
   const [list, setList] = useState<Workout[] | null>(null)
+  const LIMIT = 300
   const load = () => {
     api.get<WorkoutStats>(`${V1}/workouts/stats?range=${range}`).then(setStats).catch(() => {})
-    api.get<Workout[]>(`${V1}/workouts?range=${range}&from=${rangeFrom(range)}&limit=300${kind ? `&kind=${kind}` : ''}`).then(setList).catch(() => {})
+    api.get<Workout[]>(`${V1}/workouts?range=${range}&from=${rangeFrom(range)}&limit=${LIMIT}${kind ? `&kind=${kind}` : ''}`).then(setList).catch(() => {})
   }
   useEffect(() => { load() }, [range, kind]) // eslint-disable-line react-hooks/exhaustive-deps
   useOnChange(load)
   if (!stats || !list) return <Loading />
-  const total = stats.by_kind.reduce((a, k) => ({ n: a.n + k.count, s: a.s + k.duration_s, d: a.d + k.distance_m, e: a.e + k.energy_kcal }), { n: 0, s: 0, d: 0, e: 0 })
+  const shown = kind ? stats.by_kind.filter(k => k.kind === kind) : stats.by_kind
+  const total = shown.reduce((a, k) => ({ n: a.n + k.count, s: a.s + k.duration_s, d: a.d + k.distance_m, e: a.e + k.energy_kcal }), { n: 0, s: 0, d: 0, e: 0 })
   const weeks = Object.entries(stats.weekly).sort(([a], [b]) => a.localeCompare(b)).slice(-12)
-  const byDay = new Map<string, Workout[]>()
-  for (const w of list) { byDay.set(w.date, [...(byDay.get(w.date) || []), w]) }
+  const kindMax = Math.max(...stats.by_kind.map(k => k.duration_s), 1)
+  // grouped by month: a header with the month's totals, then one row per workout
+  const byMonth = new Map<string, Workout[]>()
+  for (const w of list) { const m = w.date.slice(0, 7); byMonth.set(m, [...(byMonth.get(m) || []), w]) }
+  const monthName = (ym: string) => { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) }
+  const setKind = (k: string) => setSp({ range, ...(k ? { kind: k } : {}) })
+  const big: [string, string][] = [
+    ['Workouts', String(total.n)],
+    ['Time', fmtDurationS(total.s)],
+    ...(total.d ? [['Distance', fmtDistance(total.d)] as [string, string]] : []),
+    ...(total.e ? [['Energy', `${Math.round(total.e).toLocaleString()} kcal`] as [string, string]] : []),
+  ]
   return (
-    <div className="stack loose">
-      <PageHeader title="Workouts" sub={`${total.n} in this range · ${fmtDurationS(total.s)}${total.d ? ` · ${fmtDistance(total.d)}` : ''}${total.e ? ` · ${Math.round(total.e).toLocaleString()} kcal` : ''}`}
-        actions={<button type="button" className="btn primary" onClick={() => openCreate('workout')}><Icon name="plus" size={15} />Add</button>} />
-      <div className="row wrap filters">
-        <div className="scroll-x"><Segmented size="sm" value={range} onChange={v => setSp({ range: v, ...(kind ? { kind } : {}) })} options={RANGES.map(r => ({ value: r.id, label: r.label }))} /></div>
-        <Select value={kind} onChange={v => setSp({ range, ...(v ? { kind: v } : {}) })} options={(catalog?.workout_kinds || []).map(k => ({ value: k.key, label: k.name }))} placeholder="Every kind" clearLabel="Every kind" />
-      </div>
-      {stats.by_kind.length > 0 && <div className="two-col">
-        <section className="card"><div className="card-head"><div className="grow"><h2>By kind</h2></div></div><div className="card-body flush">
-          <ul className="list">{stats.by_kind.map(k => <li key={k.kind}><Link to={`/workouts?range=${range}&kind=${k.kind}`} className="list-row"><span className="list-ico"><Icon name={KIND_ICON[k.kind] || 'activity'} size={16} /></span><span className="grow"><b>{k.name}</b><span className="muted small block">{k.count} × · {fmtDurationS(k.duration_s)}{k.distance_m ? ` · ${fmtDistance(k.distance_m)}` : ''}{k.energy_kcal ? ` · ${Math.round(k.energy_kcal)} kcal` : ''}</span></span></Link></li>)}</ul>
-        </div></section>
-        <section className="card"><div className="card-head"><div className="grow"><h2>Per week</h2><p className="muted small">Workouts per week, last {weeks.length}</p></div></div><div className="card-body">
-          <Bars items={weeks.map(([d, n]) => ({ label: fmtDate(d, false), value: n }))} format={v => String(v)} height={110} />
-        </div></section>
+    <div className="stack loose wl-page">
+      <PageHeader title="Workouts" sub={`${fmtDate(rangeFrom(range))} – today`}
+        actions={<><div className="scroll-x"><Segmented size="sm" value={range} onChange={v => setSp({ range: v, ...(kind ? { kind } : {}) })} options={RANGES.map(r => ({ value: r.id, label: r.label }))} /></div>
+          <button type="button" className="btn primary" onClick={() => openCreate('workout')}><Icon name="plus" size={15} />Add</button></>} />
+
+      {stats.by_kind.length > 1 && <div className="wl-kinds scroll-x">
+        <button type="button" className={`wl-kind ${!kind ? 'active' : ''}`} onClick={() => setKind('')}>All<span className="tnum">{stats.by_kind.reduce((a, k) => a + k.count, 0)}</span></button>
+        {stats.by_kind.map(k => <button key={k.kind} type="button" className={`wl-kind ${kind === k.kind ? 'active' : ''}`} style={{ '--tile': kindColor(k.kind) } as React.CSSProperties} onClick={() => setKind(kind === k.kind ? '' : k.kind)}>
+          <Icon name={KIND_ICON[k.kind] || 'activity'} size={13} />{k.name}<span className="tnum">{k.count}</span></button>)}
       </div>}
-      {list.length === 0 ? <Empty title="No workouts in this range" icon="run"><button type="button" className="link-btn" onClick={() => openCreate('workout')}>Add one</button>, or let the phone send them.</Empty> : (
-        <section className="card"><div className="card-body flush">
-          {[...byDay.entries()].map(([d, ws]) => (
-            <div key={d}>
-              <div className="day-h">{weekday(d)} {fmtDate(d)}</div>
-              <ul className="list">{ws.map(w => (
-                <li key={w.id}><Link to={`/workouts/${w.id}`} className="list-row">
-                  <span className="list-ico" style={{ background: 'var(--accent-soft)' }}><Icon name={KIND_ICON[w.kind] || 'activity'} size={16} /></span>
-                  <span className="grow"><b>{w.name || w.kind}</b><span className="muted small block">{fmtISOTime(w.start_at)} · {fmtDurationS(w.duration_s)}{w.distance_m ? ` · ${fmtDistance(w.distance_m)}` : ''}{w.distance_m > 500 && (w.kind === 'running' || w.kind === 'walking') ? ` · ${fmtPace(w.duration_s / (w.distance_m / 1000))}` : ''}{w.energy_kcal ? ` · ${Math.round(w.energy_kcal)} kcal` : ''}{w.avg_hr ? ` · ♥ ${Math.round(w.avg_hr)}` : ''}</span></span>
-                  {w.habit_id && <Icon name="check-circle" size={14} className="ok" title="Ticked a habit" />}
-                  <Icon name="chevron-right" size={14} className="muted" />
-                </Link></li>
-              ))}</ul>
-            </div>
-          ))}
+
+      {total.n > 0 && <section className="card wl-summary">
+        <div className="wo-big">{big.map(([l, v]) => { const m = v.match(/^([\d.,:]+)\s*([a-zA-Z/]+)$/); return <div key={l} className="wo-big-item"><span className="wo-big-v tnum">{m ? m[1] : v}{m && m[2] && <small>{m[2]}</small>}</span><span className="wo-big-l">{l}</span></div> })}</div>
+      </section>}
+
+      {stats.by_kind.length > 0 && <div className="wl-grid">
+        <section className="card"><div className="card-head"><div className="grow"><h2>Per week</h2><p className="muted small">Workouts in each of the last {weeks.length} weeks</p></div></div><div className="card-body">
+          <Bars items={weeks.map(([d, n]) => ({ label: fmtDate(d, false), value: n }))} format={v => String(v)} height={150} />
         </div></section>
-      )}
+        <section className="card"><div className="card-head"><div className="grow"><h2>By kind</h2><p className="muted small">Time spent on each</p></div></div>
+          <div className="card-body"><div className="kind-bars">{stats.by_kind.map(k => <button key={k.kind} type="button" className={`kind-row ${kind === k.kind ? 'active' : ''}`} style={{ '--tile': kindColor(k.kind) } as React.CSSProperties} onClick={() => setKind(kind === k.kind ? '' : k.kind)}>
+            <span className="kind-ico"><Icon name={KIND_ICON[k.kind] || 'activity'} size={14} /></span>
+            <span className="kind-main"><span className="kind-top"><b>{k.name}</b><span className="muted small tnum">{k.count} × · {fmtDurationS(k.duration_s)}{k.distance_m ? ` · ${fmtDistance(k.distance_m)}` : ''}</span></span>
+              <span className="kind-track"><i style={{ width: `${Math.max(3, (k.duration_s / kindMax) * 100)}%` }} /></span></span>
+          </button>)}</div></div>
+        </section>
+      </div>}
+
+      {list.length === 0 ? <Empty title="No workouts in this range" icon="run"><button type="button" className="link-btn" onClick={() => openCreate('workout')}>Add one</button>, or let the phone send them.</Empty> : <>
+        {[...byMonth.entries()].map(([ym, ws]) => {
+          const mt = ws.reduce((a, w) => ({ s: a.s + w.duration_s, d: a.d + w.distance_m }), { s: 0, d: 0 })
+          return <section key={ym} className="card wl-month">
+            <div className="wl-month-head"><h2>{monthName(ym)}</h2><span className="muted small tnum">{ws.length} {ws.length === 1 ? 'workout' : 'workouts'} · {fmtDurationS(mt.s)}{mt.d ? ` · ${fmtDistance(mt.d)}` : ''}</span></div>
+            <ul className="list">{ws.map((w, i) => {
+              const sameDay = i > 0 && ws[i - 1].date === w.date
+              const pace = w.distance_m > 500 && ON_FOOT.has(w.kind) ? fmtPace(w.duration_s / (w.distance_m / 1000)) : ''
+              return <li key={w.id}><Link to={`/workouts/${w.id}`} className={`wl-row ${sameDay ? 'same-day' : ''}`} style={{ '--tile': kindColor(w.kind) } as React.CSSProperties}>
+                <span className="wl-date">{!sameDay && <><span>{weekday(w.date)}</span><b className="tnum">{Number(w.date.slice(8, 10))}</b></>}</span>
+                <span className="wl-ico"><Icon name={KIND_ICON[w.kind] || 'activity'} size={16} /></span>
+                <span className="wl-name"><b>{w.name || w.kind}</b><span className="muted small">{fmtISOTime(w.start_at)}<span className="wl-mob">{w.distance_m ? ` · ${fmtDistance(w.distance_m)}` : ''}{pace ? ` · ${pace}` : ''}</span>{w.place ? ` · ${w.place}` : ''}{w.device ? <span className="wl-desk"> · {w.device}</span> : null}</span></span>
+                <span className="wl-m tnum"><b>{fmtDurationS(w.duration_s)}</b><span>time</span></span>
+                <span className="wl-m tnum">{w.distance_m ? <><b>{fmtDistance(w.distance_m)}</b><span>distance</span></> : null}</span>
+                <span className="wl-m tnum wl-opt">{pace ? <><b>{pace}</b><span>pace</span></> : null}</span>
+                <span className="wl-m tnum wl-opt">{w.energy_kcal ? <><b>{Math.round(w.energy_kcal)}</b><span>kcal</span></> : null}</span>
+                <span className="wl-m tnum wl-opt">{w.avg_hr ? <><b className="wl-hr"><Icon name="heart" size={11} />{Math.round(w.avg_hr)}</b><span>bpm</span></> : null}</span>
+                <span className="wl-end">{w.habit_id ? <Icon name="check-circle" size={14} className="ok" title="Ticked a habit" /> : null}<Icon name="chevron-right" size={14} className="muted" /></span>
+              </Link></li>
+            })}</ul>
+          </section>
+        })}
+        {list.length >= LIMIT && <p className="muted small center">Showing the latest {LIMIT}. Pick a shorter range or one kind to see the rest.</p>}
+      </>}
     </div>
   )
 }
