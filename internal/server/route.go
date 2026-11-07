@@ -16,7 +16,7 @@ import (
 // ---- a workout's route ----
 //
 // The iPhone app sends the route Apple Health recorded with the workout (and
-// the heart rate along it); that is kept in workout_tracks and wins. Without
+// the rest it recorded, see track.go); that is kept in workout_tracks and wins. Without
 // one, Movement (or Dawarich) keeps the phone's positions; Health asks for the
 // ones recorded between a workout's start and end and draws them. That answer
 // is cached a day per workout; "apply" copies the recorded distance onto a
@@ -37,9 +37,8 @@ type routeView struct {
 	// "phone" (Apple Health's route, sent with the workout) or "movement"
 	Source string `json:"source"`
 	// The phone's route with altitude and time: [lat, lng, altitude m, seconds from the start]
-	Track     [][4]float64 `json:"track,omitempty"`
-	HeartRate [][2]float64 `json:"heart_rate,omitempty"`
-	Place     string       `json:"place,omitempty"`
+	Track [][4]float64 `json:"track,omitempty"`
+	Place string       `json:"place,omitempty"`
 }
 
 func routeKey(uid, wid int64) string { return fmt.Sprintf("route:%d:%d", uid, wid) }
@@ -53,21 +52,14 @@ func (s *Server) workoutRoute(ctx context.Context, uid int64, wk *store.Workout,
 	if track != nil && len(track.Route) > 1 {
 		return s.phoneRoute(ctx, uid, wk, track), nil
 	}
-	rv, err := s.movementRoute(ctx, uid, wk, fresh)
-	if err != nil {
-		return nil, err
-	}
-	if track != nil {
-		rv.HeartRate = track.HeartRate
-	}
-	return rv, nil
+	return s.movementRoute(ctx, uid, wk, fresh)
 }
 
 // phoneRoute draws what Apple Health recorded; the town it started in is
 // looked up once and kept on the workout.
 func (s *Server) phoneRoute(ctx context.Context, uid int64, wk *store.Workout, t *store.WorkoutTrack) *routeView {
 	rv := &routeView{Connected: true, Via: "Apple Health", Source: "phone", Start: wk.StartAt, End: wk.EndAt, FetchedAt: t.UpdatedAt,
-		Track: t.Route, HeartRate: t.HeartRate, N: len(t.Route), Place: wk.Place}
+		Track: t.Route, N: len(t.Route), Place: wk.Place}
 	rv.Points = make([][2]float64, 0, len(t.Route))
 	minLat, minLng, maxLat, maxLng := 90.0, 180.0, -90.0, -180.0
 	for i, p := range t.Route {

@@ -48,7 +48,7 @@ export interface MetricPage {
 
 export interface Workout {
   id: number; kind: string; name: string; start_at: string; end_at: string; date: string; duration_s: number; distance_m: number; energy_kcal: number; total_kcal: number
-  avg_hr: number; max_hr: number; elevation_m: number; steps: number; temperature: number | null; humidity: number | null; place: string
+  avg_hr: number; max_hr: number; elevation_m: number; steps: number; temperature: number | null; humidity: number | null; place: string; effort: number | null; effort_estimated: number | null
   source: string; device: string; external_id: string; notes: string; habit_id: number | null; habit_marked_at: string; habit_error: string; created_at: string; updated_at: string
 }
 export interface WorkoutKindStat { kind: string; name: string; count: number; duration_s: number; distance_m: number; energy_kcal: number }
@@ -99,4 +99,11 @@ export const RANGES: { id: string; label: string }[] = [{ id: 'w', label: '7 day
 export function cap(s: string): string { return s ? s[0].toUpperCase() + s.slice(1) : '' }
 
 export interface Route { connected: boolean; via?: string; detail?: string; points: [number, number][]; n: number; distance_m: number; bounds?: [number, number][]; start: string; end: string; fetched_at: string; open_url?: string
-  source: 'phone' | 'movement'; track?: [number, number, number, number][]; heart_rate?: [number, number][]; place?: string }
+  source: 'phone' | 'movement'; track?: [number, number, number, number][]; place?: string }
+/** A part of a workout (interval, lap, segment, activity, split) with what it took. */
+export interface TrackPart {
+  kind: 'lap' | 'segment' | 'interval' | 'activity' | 'split'; label?: string; purpose?: 'warmup' | 'work' | 'recovery' | 'cooldown'; goal?: string; n?: number
+  start_s: number; end_s: number; duration_s: number; distance_m: number; pace_s_km?: number; speed_ms?: number; hr_avg?: number; hr_max?: number; power_avg?: number; cadence_avg?: number; climb_m: number
+}
+/** GET /workouts/{id}/track: series as [seconds, value] by key, the parts and the splits. */
+export interface WorkoutTrack { route: [number, number, number, number][]; series: Record<string, [number, number][]>; segments: TrackPart[]; splits: TrackPart[]; split_unit: 'km' | 'mi'; distance_from: '' | 'series' | 'route'; updated_at?: string }

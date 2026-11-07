@@ -16,7 +16,10 @@ Returns `{"samples": n, "workouts": n, "sleep": n, "skipped": n, "unknown": [...
 {
   "samples":  [{"metric": "weight", "at": "2025-10-23T07:30:00+02:00", "value": 80.4, "unit": "kg", "device": "Withings", "note": ""}],
   "workouts": [{"kind": "running", "start": "2025-10-23T07:00:00+02:00", "end": "2025-10-23T07:35:00+02:00", "distance_m": 5200, "energy_kcal": 310, "avg_hr": 151, "max_hr": 171, "elevation_m": 42,
-                "total_kcal": 390, "temperature": 12, "humidity": 70, "route": [[44.7712, 17.1913, 162.5, 0], [44.7716, 17.1918, 163.0, 9]], "heart_rate": [[0, 98], [10, 112]]}],
+                "total_kcal": 390, "temperature": 12, "humidity": 70, "route": [[44.7712, 17.1913, 162.5, 0], [44.7716, 17.1918, 163.0, 9]],
+                "series": {"heart_rate": [[0, 98], [5, 112]], "speed": [[0, 3.1], [5, 3.4]], "distance": [[0, 0], [5, 16]]},
+                "segments": [{"kind": "interval", "purpose": "work", "label": "Work 1", "goal": "400 m", "start_s": 600, "end_s": 690}],
+                "effort": 7, "effort_estimated": 6}],
   "sleep":    [{"start": "2025-10-22T23:10:00+02:00", "end": "2025-10-23T06:40:00+02:00", "asleep_min": 408, "deep_min": 66, "rem_min": 84, "core_min": 258, "awake_min": 42}]
 }
 ```
@@ -29,7 +32,7 @@ Returns `{"samples": n, "workouts": n, "sleep": n, "skipped": n, "unknown": [...
 
 ### `POST /workouts`, `POST /sleep`
 
-Same fields as above, one at a time. `PUT/DELETE /workouts/{id}`, `POST /workouts/{id}/habit {"habit_id": n}` ticks a Pocket Habits habit for it, `GET /workouts/{id}/route[?fresh=1]` is the workout's route: the one the phone sent with it (`source: "phone"`, also `track` with altitude and seconds from the start, `heart_rate`, `place`), else the one Pocket Movement recorded between start and end (`source: "movement"`, `points`, `distance_m`, `bounds`; cached a day), `POST /workouts/{id}/route/apply` copies that distance onto the workout, `DELETE /sleep/{id}`.
+Same fields as above, one at a time. `PUT/DELETE /workouts/{id}`, `POST /workouts/{id}/habit {"habit_id": n}` ticks a Pocket Habits habit for it, `GET /workouts/{id}/route[?fresh=1]` is the workout's route: the one the phone sent with it (`source: "phone"`, also `track` with altitude and seconds from the start, `heart_rate`, `place`), else the one Pocket Movement recorded between start and end (`source: "movement"`, `points`, `distance_m`, `bounds`; cached a day), `GET /workouts/{id}/track[?unit=km|mi]` is everything recorded along the workout: `series` (key → `[[seconds from the start, value], …]`; `heart_rate` bpm, `speed` m/s, `power` W, `cadence` per minute, `distance` m running total, `stride_length` m, `ground_contact` ms, `vertical_oscillation` cm — a reading at t covers the few seconds from t), `segments` (laps, segments, planned intervals with `purpose` warmup/work/recovery/cooldown and `goal`, multisport activities) and `splits`, each part with `duration_s`, `distance_m`, `pace_s_km`, `speed_ms`, `hr_avg`, `hr_max`, `power_avg`, `cadence_avg` and `climb_m`; `route` too, except for a linked app (`health:read` gets the numbers, not the places). `POST /workouts/{id}/route/apply` copies that distance onto the workout, `DELETE /sleep/{id}`.
 
 ### Imports
 

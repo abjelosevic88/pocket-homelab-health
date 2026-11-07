@@ -446,27 +446,72 @@ func TestWorkoutTrackFromPhone(t *testing.T) {
 	reverseGeocodeURL = ""
 	a := newApp(t, nil)
 	d := today()
-	route := [][4]float64{{44.7700, 17.1900, 160, 0}, {44.7710, 17.1905, 162, 60}, {44.7720, 17.1910, 165, 120}}
-	w := map[string]any{"name": "Walking", "start": d + "T09:00:00Z", "end": d + "T09:20:00Z", "distance_m": 1020, "energy_kcal": 62,
-		"total_kcal": 101, "temperature": 4, "humidity": 90, "route": route, "heart_rate": [][2]float64{{0, 90}, {60, 104}}}
+	// 40 m of climb in 2 m steps of GPS altitude, no elevation from the watch
+	route := [][4]float64{}
+	for i := 0; i <= 20; i++ {
+		route = append(route, [4]float64{44.77 + float64(i)*0.0005, 17.19, 160 + float64(i)*2, float64(i * 60)})
+	}
+	// intervals: 2 × (400 m work at 4 m/s, 200 m recovery at 2 m/s) after a 600 s warm-up at 2.5 m/s
+	// a reading at t covers the 5 s from t; the distance is the running total at t
+	dist, hr, sec, total := [][2]float64{{0, 0}}, [][2]float64{}, 0.0, 0.0
+	step := func(dur, speed, bpm float64) {
+		for t := sec; t < sec+dur; t += 5 {
+			total += speed * 5
+			dist = append(dist, [2]float64{t + 5, total})
+			hr = append(hr, [2]float64{t, bpm})
+		}
+		sec += dur
+	}
+	step(600, 2.5, 120)
+	step(100, 4, 170)
+	step(100, 2, 140)
+	step(100, 4, 175)
+	step(100, 2, 142)
+	segs := []map[string]any{{"kind": "interval", "purpose": "warmup", "label": "Warm-up", "start_s": 0, "end_s": 600},
+		{"kind": "interval", "purpose": "work", "label": "Work 1", "goal": "400 m", "start_s": 600, "end_s": 700},
+		{"kind": "interval", "purpose": "recovery", "label": "Recovery 1", "start_s": 700, "end_s": 800},
+		{"kind": "interval", "purpose": "work", "label": "Work 2", "goal": "400 m", "start_s": 800, "end_s": 900},
+		{"kind": "lap", "start_s": 0, "end_s": 450}}
+	w := map[string]any{"name": "Running", "start": d + "T09:00:00Z", "end": d + "T09:20:00Z", "distance_m": total, "energy_kcal": 62,
+		"total_kcal": 101, "temperature": 4, "humidity": 90, "effort": 7, "effort_estimated": 6, "route": route,
+		"series": map[string]any{"heart_rate": hr, "distance": dist}, "segments": segs}
 	a.ok(a.alice, "POST", "/api/v1/ingest?source=pocket-homelab", map[string]any{"workouts": []any{w}})
 	_, _, list := a.call(a.alice, "GET", "/api/v1/workouts", nil)
 	wk := list[0].(map[string]any)
-	if num(wk, "total_kcal") != 101 || num(wk, "humidity") != 90 || num(wk, "temperature") != 4 {
+	if num(wk, "total_kcal") != 101 || num(wk, "humidity") != 90 || num(wk, "effort") != 7 || num(wk, "effort_estimated") != 6 || num(wk, "elevation_m") != 40 {
 		t.Fatalf("workout = %v", wk)
 	}
 	id := int64(num(wk, "id"))
 	rv := a.ok(a.alice, "GET", fmt.Sprintf("/api/v1/workouts/%d/route", id), nil)
-	if rv["source"] != "phone" || len(rv["points"].([]any)) != 3 || len(rv["track"].([]any)) != 3 || len(rv["heart_rate"].([]any)) != 2 || num(rv, "distance_m") < 200 {
+	if rv["source"] != "phone" || len(rv["points"].([]any)) != 21 || len(rv["track"].([]any)) != 21 || num(rv, "distance_m") < 1000 {
 		t.Fatalf("route = %v", rv)
 	}
-	// sent again before Apple Health saved the route: the route stays
-	delete(w, "route")
-	delete(w, "heart_rate")
-	a.ok(a.alice, "POST", "/api/v1/ingest?source=pocket-homelab", map[string]any{"workouts": []any{w}})
-	rv = a.ok(a.alice, "GET", fmt.Sprintf("/api/v1/workouts/%d/route", id), nil)
-	if rv["source"] != "phone" || len(rv["heart_rate"].([]any)) != 2 {
-		t.Fatalf("route after resend = %v", rv)
+	tr := a.ok(a.alice, "GET", fmt.Sprintf("/api/v1/workouts/%d/track", id), nil)
+	parts := tr["segments"].([]any)
+	work1 := parts[2].(map[string]any) // sorted by start: warm-up, lap, work 1
+	if tr["distance_from"] != "series" || len(parts) != 5 || work1["label"] != "Work 1" || num(work1, "distance_m") != 400 || num(work1, "pace_s_km") != 250 || num(work1, "hr_avg") != 170 {
+		t.Fatalf("segments = %v", parts)
 	}
-	a.expect(404, a.bob, "GET", fmt.Sprintf("/api/v1/workouts/%d/route", id), nil)
+	splits := tr["splits"].([]any)
+	if len(splits) != 3 || num(splits[0].(map[string]any), "distance_m") != 1000 || num(splits[0].(map[string]any), "duration_s") != 400 {
+		t.Fatalf("splits = %v", splits)
+	}
+	// sent again before Apple Health saved the route, and in the older heart-rate form: the rest stays
+	delete(w, "route")
+	delete(w, "series")
+	delete(w, "segments")
+	delete(w, "effort")
+	w["heart_rate"] = [][2]float64{{0, 90}, {60, 104}}
+	w["elevation_m"] = 0
+	a.ok(a.alice, "POST", "/api/v1/ingest?source=pocket-homelab", map[string]any{"workouts": []any{w}})
+	tr = a.ok(a.alice, "GET", fmt.Sprintf("/api/v1/workouts/%d/track", id), nil)
+	series := tr["series"].(map[string]any)
+	if len(tr["route"].([]any)) != 21 || len(tr["segments"].([]any)) != 5 || len(series["heart_rate"].([]any)) != 2 {
+		t.Fatalf("track after resend = %v", tr)
+	}
+	wk = a.ok(a.alice, "GET", fmt.Sprintf("/api/v1/workouts/%d", id), nil)
+	if num(wk, "effort") != 7 || num(wk, "elevation_m") != 40 {
+		t.Fatalf("resend lost effort or climb: %v", wk)
+	}
+	a.expect(404, a.bob, "GET", fmt.Sprintf("/api/v1/workouts/%d/track", id), nil)
 }

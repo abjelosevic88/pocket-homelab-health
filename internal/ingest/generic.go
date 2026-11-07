@@ -18,7 +18,8 @@ import (
 //	{"samples": [{"metric": "weight", "at": "2025-10-23T07:30:00+02:00", "value": 80.4, "unit": "kg"}],
 //	             (an hour's average may carry "end", "min" and "max")
 //	 "workouts": [{"kind": "running", "start": "…", "end": "…", "distance_m": 5100, "energy_kcal": 320,
-//	               "route": [[44.77, 17.19, 160, 0], …], "heart_rate": [[0, 92], …]}],
+//	               "route": [[44.77, 17.19, 160, 0], …], "series": {"heart_rate": [[0, 92], …]},
+//	               "segments": [{"kind": "interval", "purpose": "work", "start_s": 600, "end_s": 690}]}],
 //	 "sleep": [{"start": "…", "end": "…", "asleep_min": 430, "deep_min": 60}]}
 type Generic struct {
 	Samples []struct {
@@ -53,9 +54,14 @@ type Generic struct {
 		Humidity   *float64 `json:"humidity"`
 		TotalKcal  float64  `json:"total_kcal"`
 		Place      string   `json:"place"`
-		// [[lat, lng, altitude m, seconds from the start], …] and [[seconds, bpm], …]
-		Route     [][4]float64 `json:"route"`
-		HeartRate [][2]float64 `json:"heart_rate"`
+		// [[lat, lng, altitude m, seconds from the start], …]
+		Route [][4]float64 `json:"route"`
+		// {"heart_rate": [[seconds, bpm], …], "speed": …}; "heart_rate" alone is the older form
+		Series          store.Series           `json:"series"`
+		HeartRate       [][2]float64           `json:"heart_rate"`
+		Segments        []store.WorkoutSegment `json:"segments"`
+		Effort          *float64               `json:"effort"`
+		EffortEstimated *float64               `json:"effort_estimated"`
 	} `json:"workouts"`
 	Sleep []struct {
 		Start     string  `json:"start"`
@@ -132,7 +138,14 @@ func Pocket(raw []byte, source string) (*Batch, error) {
 			continue
 		}
 		wo := store.Workout{Kind: w.Kind, Name: w.Name, StartAt: RFC(start), DurationS: w.DurationS, DistanceM: w.DistanceM, EnergyKcal: w.EnergyKcal, AvgHR: w.AvgHR, MaxHR: w.MaxHR, ElevationM: w.ElevationM, Steps: w.Steps, Notes: w.Notes, Source: source, Device: w.Device, ExternalID: w.ExternalID, Temperature: w.Temp,
-			Humidity: w.Humidity, TotalKcal: w.TotalKcal, Place: w.Place, Route: w.Route, HeartRate: w.HeartRate}
+			Humidity: w.Humidity, TotalKcal: w.TotalKcal, Place: w.Place, Route: w.Route,
+			Series: w.Series, Segments: w.Segments, Effort: w.Effort, EffortEstimated: w.EffortEstimated}
+		if len(w.HeartRate) > 0 && len(wo.Series["heart_rate"]) == 0 {
+			if wo.Series == nil {
+				wo.Series = store.Series{}
+			}
+			wo.Series["heart_rate"] = w.HeartRate
+		}
 		if wo.Kind == "" {
 			wo.Kind = store.WorkoutKindFromApple(w.Name)
 		} else if store.WorkoutKindName(wo.Kind) == "" {

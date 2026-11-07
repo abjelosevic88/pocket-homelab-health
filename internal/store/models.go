@@ -79,17 +79,42 @@ type Workout struct {
 	HabitError    string   `json:"habit_error"`
 	CreatedAt     string   `json:"created_at"`
 	UpdatedAt     string   `json:"updated_at"`
-	// What the phone recorded along the way; written to workout_tracks, read with WorkoutTrack.
-	Route     [][4]float64 `json:"-"`
-	HeartRate [][2]float64 `json:"-"`
+	// Apple's effort rating, 1–10: the one the person gave and the watch's estimate.
+	Effort          *float64 `json:"effort"`
+	EffortEstimated *float64 `json:"effort_estimated"`
+	// What was recorded along the way; written to workout_tracks, read with WorkoutTrack.
+	Route    [][4]float64     `json:"-"`
+	Series   Series           `json:"-"`
+	Segments []WorkoutSegment `json:"-"`
 }
 
-// WorkoutTrack is a workout's recorded route ([lat, lng, altitude m, seconds
-// from the start]) and heart rate ([seconds from the start, bpm]).
+// Series holds quantities recorded along a workout: key → [[seconds from the
+// start, value], …]; a reading at t covers the few seconds from t, the
+// distance is the running total at t. Keys and units: heart_rate bpm, speed m/s, power W,
+// cadence steps or revolutions per minute, distance m (running total),
+// stride_length m, ground_contact ms, vertical_oscillation cm; other keys are
+// kept as sent.
+type Series map[string][][2]float64
+
+// WorkoutSegment is a part of a workout the device marked: a lap, a segment,
+// an interval of a planned workout (purpose warmup, work, recovery, cooldown)
+// or one activity of a multisport workout. Times are seconds from the start.
+type WorkoutSegment struct {
+	Kind    string  `json:"kind"`              // lap | segment | interval | activity
+	Label   string  `json:"label,omitempty"`   // "Work 3", "Warm-up", "Cycling"
+	Purpose string  `json:"purpose,omitempty"` // warmup | work | recovery | cooldown
+	Goal    string  `json:"goal,omitempty"`    // what the plan asked for: "400 m", "2 min"
+	StartS  float64 `json:"start_s"`
+	EndS    float64 `json:"end_s"`
+}
+
+// WorkoutTrack is what was recorded along a workout: the route ([lat, lng,
+// altitude m, seconds from the start]), the series and the segments.
 type WorkoutTrack struct {
-	Route     [][4]float64 `json:"route"`
-	HeartRate [][2]float64 `json:"heart_rate"`
-	UpdatedAt string       `json:"updated_at"`
+	Route     [][4]float64     `json:"route"`
+	Series    Series           `json:"series"`
+	Segments  []WorkoutSegment `json:"segments"`
+	UpdatedAt string           `json:"updated_at"`
 }
 
 // SleepSession is one night; Date is the morning.

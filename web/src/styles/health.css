@@ -229,3 +229,9 @@ a.list-row:hover { background: var(--surface-2); }
 @media (max-width: 767px) { .route-map { height: 240px; } }
 .pace-legend { display: inline-flex; align-items: center; gap: 8px; }
 .pace-legend i { display: inline-block; width: 96px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #ef4444, #f59e0b, #eab308, #22c55e); }
+
+/* a workout's parts: intervals marked by purpose */
+.table.parts .purpose-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.table.parts .purpose-work .purpose-dot { background: var(--accent); }
+.table.parts .purpose-warmup .purpose-dot, .table.parts .purpose-cooldown .purpose-dot { background: #f59e0b; }
+.table.parts .purpose-recovery td { color: var(--text-2); }

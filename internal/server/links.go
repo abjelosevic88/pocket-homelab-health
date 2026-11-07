@@ -33,7 +33,7 @@ var linkRoutes = []linkRoute{
 	{"GET", regexp.MustCompile(`^/api/v1/metrics/[a-z0-9_]+$`), "health:read"},
 	{"GET", regexp.MustCompile(`^/api/v1/day/\d{4}-\d{2}-\d{2}$`), "health:read"},
 	{"GET", regexp.MustCompile(`^/api/v1/summary/\d{4}-\d{2}-\d{2}$`), "health:read"},
-	{"GET", regexp.MustCompile(`^/api/v1/workouts/\d+$`), "health:read"},
+	{"GET", regexp.MustCompile(`^/api/v1/workouts/\d+(/track)?$`), "health:read"},
 	{"POST", regexp.MustCompile(`^/api/v1/ingest$`), "health:write"},
 	{"POST", regexp.MustCompile(`^/api/v1/samples$`), "health:write"},
 	{"POST", regexp.MustCompile(`^/api/v1/workouts$`), "health:write"},
