@@ -1,5 +1,8 @@
 # HTTPS over a VPN (Tailscale, WireGuard)
 
+This applies to every Pocket app and Pocket Core, not only Health; the
+general guide is [Reach your apps away from home](https://pockethomelab.com/docs/getting-started/away-from-home).
+
 The iPhone app sends Apple Health in the background whenever the phone
 records something new. Away from home that only works if the phone can reach
 Pocket Health over **https://**.
