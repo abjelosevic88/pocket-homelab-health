@@ -105,8 +105,8 @@ export function LineChart({ points, height = 180, color = 'var(--accent)', kind 
   )
 }
 
-/** Tiny inline line for tiles and lists. */
-export function Sparkline({ values, color = 'currentColor', width = 80, height = 24, goal }: { values: (number | null)[]; color?: string; width?: number; height?: number; goal?: number }) {
+/** Tiny inline line for tiles and lists. `fluid` stretches it across its box (no text in it, so nothing distorts). */
+export function Sparkline({ values, color = 'currentColor', width = 80, height = 24, goal, fluid = false }: { values: (number | null)[]; color?: string; width?: number; height?: number; goal?: number; fluid?: boolean }) {
   const vals = values.filter((v): v is number => v !== null && !Number.isNaN(v))
   if (vals.length < 2) return <svg width={width} height={height} className="spark" />
   const [lo, hi] = extent([...vals, ...(goal !== undefined ? [goal] : [])], 0.1)
@@ -116,9 +116,9 @@ export function Sparkline({ values, color = 'currentColor', width = 80, height =
   let d = '', open = false
   values.forEach((v, i) => { if (v === null || Number.isNaN(v)) { open = false; return } d += `${open ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)} `; open = true })
   return (
-    <svg width={width} height={height} className="spark" aria-hidden="true">
-      {goal !== undefined && <line x1={0} x2={width} y1={y(goal)} y2={y(goal)} className="spark-goal" />}
-      <path d={d} fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+    <svg width={fluid ? '100%' : width} height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio={fluid ? 'none' : undefined} className="spark" aria-hidden="true">
+      {goal !== undefined && <line x1={0} x2={width} y1={y(goal)} y2={y(goal)} className="spark-goal" vectorEffect="non-scaling-stroke" />}
+      <path d={d} fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
     </svg>
   )
 }
