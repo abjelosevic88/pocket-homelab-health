@@ -515,3 +515,24 @@ func TestWorkoutTrackFromPhone(t *testing.T) {
 	}
 	a.expect(404, a.bob, "GET", fmt.Sprintf("/api/v1/workouts/%d/track", id), nil)
 }
+
+func TestDropAutoSplits(t *testing.T) {
+	seg := func(from, to, d float64, label string) partView {
+		return partView{WorkoutSegment: store.WorkoutSegment{Kind: "segment", Label: label, StartS: from, EndS: to}, DistanceM: d}
+	}
+	// a watch's own km and mile chains side by side, plus one segment the runner marked
+	parts := []partView{
+		seg(0, 552, 1000, "Segment 1"), seg(0, 835, 1608, "Segment 2"), seg(552, 1078, 1000, "Segment 3"),
+		seg(835, 1770, 1611, "Segment 4"), seg(1078, 1666, 1000, "Segment 5"), seg(1666, 1940, 481, "Segment 6"),
+		seg(1770, 1940, 262, "Segment 7"), seg(300, 900, 2100, "Segment 8"),
+		{WorkoutSegment: store.WorkoutSegment{Kind: "lap", StartS: 0, EndS: 600}, DistanceM: 1000},
+	}
+	got := dropAutoSplits(parts)
+	if len(got) != 2 || got[0].Label != "Segment 1" || got[0].DistanceM != 2100 || got[1].Kind != "lap" {
+		t.Fatalf("got %+v", got)
+	}
+	// a single kilometre segment is not a chain: it stays
+	if one := dropAutoSplits([]partView{seg(0, 300, 1000, "Segment 1")}); len(one) != 1 {
+		t.Fatalf("single segment dropped: %+v", one)
+	}
+}

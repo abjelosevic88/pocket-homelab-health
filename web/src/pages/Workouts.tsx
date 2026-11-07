@@ -10,8 +10,8 @@ import { Bars, LineChart } from '../components/Chart'
 import { WorkoutModal } from '../components/forms'
 import { Select } from '../components/Select'
 import { RouteMap } from '../components/RouteMap'
-import { cumulative, speeds as trackSpeeds, thin } from '../lib/track'
-import { PartsTable, SeriesCharts } from '../components/WorkoutDetail'
+import { clock, cumulative, speeds as trackSpeeds, thin } from '../lib/track'
+import { ChartCard, EffortMeter, PartsTable, SeriesCharts, WorkoutSummary, speedText, type BigStat, type MinorStat } from '../components/WorkoutDetail'
 import { openCreate, useCatalog, useCrumb, useOnChange } from '../components/Layout'
 
 export default function Workouts() {
@@ -103,53 +103,80 @@ export function WorkoutPage() {
   if (!w) return <Loading />
   const tick = async (habitId: number) => { try { const r = await api.post<{ ok: boolean; error?: string }>(`${V1}/workouts/${w.id}/habit`, { habit_id: habitId }); toast(r.ok ? 'Habit ticked' : r.error || 'failed', r.ok ? 'ok' : 'err'); load() } catch (e) { toast((e as Error).message, 'err') } }
   const remove = async () => { try { await api.del(`${V1}/workouts/${w.id}`); navigate('/workouts') } catch (e) { toast((e as Error).message, 'err') } }
+  const imperial = settings?.units === 'imperial'
+  const paced = w.kind === 'running' || w.kind === 'walking' || w.kind === 'hiking'
   const pace = w.distance_m > 500 ? w.duration_s / (w.distance_m / 1000) : 0
-  const stats: [string, string][] = [
-    ['Duration', fmtDurationS(w.duration_s)],
-    ...(w.distance_m ? [['Distance', fmtDistance(w.distance_m)] as [string, string]] : []),
-    ...(pace && (w.kind === 'running' || w.kind === 'walking' || w.kind === 'hiking') ? [['Pace', fmtPace(pace)] as [string, string]] : []),
-    ...(w.distance_m && w.kind === 'cycling' ? [['Speed', `${((w.distance_m / 1000) / (w.duration_s / 3600)).toFixed(1)} km/h`] as [string, string]] : []),
-    ...(w.energy_kcal ? [[w.total_kcal > w.energy_kcal ? 'Active energy' : 'Energy', `${Math.round(w.energy_kcal)} kcal`] as [string, string]] : []),
-    ...(w.total_kcal > w.energy_kcal ? [['Total energy', `${Math.round(w.total_kcal)} kcal`] as [string, string]] : []),
-    ...(w.avg_hr ? [['Avg heart rate', `${Math.round(w.avg_hr)} bpm`] as [string, string]] : []),
-    ...(w.max_hr ? [['Max heart rate', `${Math.round(w.max_hr)} bpm`] as [string, string]] : []),
-    ...(w.elevation_m ? [['Elevation', `${Math.round(w.elevation_m)} m`] as [string, string]] : []),
-    ...(w.effort !== null || w.effort_estimated !== null ? [['Effort', w.effort !== null ? `${Math.round(w.effort)}/10${w.effort_estimated !== null ? ` (est. ${Math.round(w.effort_estimated)})` : ''}` : `${Math.round(w.effort_estimated!)}/10 est.`] as [string, string]] : []),
-    ...(w.steps ? [['Steps', w.steps.toLocaleString()] as [string, string]] : []),
-    ...(w.temperature !== null ? [['Weather', `${Math.round(settings?.units === 'imperial' ? w.temperature * 9 / 5 + 32 : w.temperature)}°${w.humidity !== null ? `, ${Math.round(w.humidity)}% humidity` : ''}`] as [string, string]] : []),
+  const big: BigStat[] = [
+    ...(w.distance_m ? [{ label: 'Distance', value: fmtDistance(w.distance_m) }] : []),
+    { label: 'Time', value: clock(w.duration_s) },
+    ...(pace && paced ? [{ label: 'Avg pace', value: fmtPace(pace) }] : []),
+    ...(w.distance_m && !paced && w.duration_s ? [{ label: 'Avg speed', value: speedText(w.kind, w.distance_m / w.duration_s, imperial) }] : []),
+    ...(w.energy_kcal || w.total_kcal ? [{ label: w.energy_kcal ? 'Active energy' : 'Energy', value: `${Math.round(w.energy_kcal || w.total_kcal)} kcal` }] : []),
+  ].slice(0, 4)
+  const effort = w.effort ?? w.effort_estimated
+  const minor: MinorStat[] = [
+    ...(w.avg_hr ? [{ icon: 'heart', label: 'Avg heart rate', value: `${Math.round(w.avg_hr)} bpm`, color: '#ef4444' }] : []),
+    ...(w.max_hr ? [{ icon: 'heart', label: 'Max heart rate', value: `${Math.round(w.max_hr)} bpm`, color: '#ef4444' }] : []),
+    ...(w.total_kcal > w.energy_kcal && w.energy_kcal ? [{ icon: 'flame', label: 'Total energy', value: `${Math.round(w.total_kcal)} kcal`, color: '#f97316' }] : []),
+    ...(w.elevation_m ? [{ icon: 'mountain', label: 'Climb', value: `${Math.round(w.elevation_m)} m`, color: '#22c55e' }] : []),
+    ...(effort !== null && effort !== undefined ? [{ icon: 'gauge', label: w.effort !== null ? 'Effort' : 'Effort (estimated)', color: '#eab308',
+      value: <span className="row" style={{ gap: 8 }}>{Math.round(effort)}/10<EffortMeter value={effort} />{w.effort !== null && w.effort_estimated !== null && <span className="muted small">est. {Math.round(w.effort_estimated)}</span>}</span> }] : []),
+    ...(w.steps ? [{ icon: 'footprints', label: 'Steps', value: w.steps.toLocaleString(), color: '#06b6d4' }] : []),
   ]
+  const place = w.place || route?.place
+  const temp = w.temperature !== null ? Math.round(imperial ? w.temperature * 9 / 5 + 32 : w.temperature) : null
+  const hasMap = !!route?.connected && route.points.length > 1
+  const routeNote = !route ? 'Looking for the positions recorded during the workout…' : route.source === 'phone' ? `Recorded by ${w.device || 'the phone'} · ${route.n.toLocaleString()} positions · ${fmtDistance(route.distance_m)}` : !route.connected ? `Pocket Movement is not connected${route.detail ? `: ${route.detail}` : ''}.` : route.detail ? `Could not read the route: ${route.detail}` : route.n === 0 ? 'No route: nothing was recorded between the start and the end of this workout.' : `${route.n.toLocaleString()} positions from Pocket Movement · ${fmtDistance(route.distance_m)} recorded${w.distance_m ? ` (the workout says ${fmtDistance(w.distance_m)})` : ''}`
+  const routeActions = route?.connected && route.source !== 'phone' && <span className="row" style={{ gap: 6 }}><button type="button" className="btn ghost sm" onClick={() => loadRoute(true)}><Icon name="refresh" size={14} />Refresh</button>{route.distance_m > 0 && Math.abs(route.distance_m - w.distance_m) > 50 && <button type="button" className="btn sm" onClick={async () => { try { setW(await api.post<Workout>(`${V1}/workouts/${w.id}/route/apply`)); toast('Distance taken from the route') } catch (e) { toast((e as Error).message, 'err') } }}>Use this distance</button>}</span>
+  const elevRange = elevation.length > 1 ? [Math.min(...elevation.map(p => p.y)), Math.max(...elevation.map(p => p.y))] : null
+  const planned = detail ? detail.segments.filter(p => p.kind !== 'lap') : []
+  const laps = detail ? detail.segments.filter(p => p.kind === 'lap') : []
+  const plannedTitle = planned.some(p => p.kind === 'interval') ? 'Intervals' : planned.some(p => p.kind === 'activity') ? 'Activities' : 'Segments'
+  const splitWord = detail?.split_unit === 'mi' ? 'mile' : 'kilometre'
   return (
-    <div className="stack loose">
-      <PageHeader title={<span className="row" style={{ gap: 10 }}><span className="tile-ico lg" style={{ '--tile': '#22c55e' } as React.CSSProperties}><Icon name={KIND_ICON[w.kind] || 'activity'} size={18} /></span>{w.name || w.kind}</span>}
-        sub={`${fmtDateTime(w.start_at)}${w.end_at ? `–${fmtISOTime(w.end_at)}` : ''}${w.place || route?.place ? ` · ${w.place || route?.place}` : ''} · ${w.source}${w.device ? ` · ${w.device}` : ''}`}
-        actions={<><button type="button" className="btn" onClick={() => setEdit(true)}><Icon name="edit" size={15} />Edit</button><button type="button" className="btn ghost danger-text" onClick={() => setDel(true)}>Delete</button></>} />
-      <div className="stats-row">{stats.map(([l, v]) => <div key={l} className="stat"><span className="stat-l">{l}</span><span className="stat-v tnum">{v}</span></div>)}</div>
-      {w.notes && <section className="card"><div className="card-body"><p style={{ whiteSpace: 'pre-wrap' }}>{w.notes}</p></div></section>}
-      <section className="card"><div className="card-head"><div className="grow"><h2>Route</h2><p className="muted small">{!route ? 'Looking for the positions recorded during the workout…' : route.source === 'phone' ? `Recorded by ${w.device || 'the phone'} · ${route.n.toLocaleString()} positions · ${fmtDistance(route.distance_m)}` : !route.connected ? `Pocket Movement is not connected${route.detail ? `: ${route.detail}` : ''}.` : route.detail ? `Could not read the route: ${route.detail}` : route.n === 0 ? 'Nothing was recorded between the start and the end of this workout.' : `${route.n.toLocaleString()} positions from Pocket Movement · ${fmtDistance(route.distance_m)} recorded${w.distance_m ? ` (the workout says ${fmtDistance(w.distance_m)})` : ''}`}</p></div>
-        {route?.connected && route.source !== 'phone' && <span className="row"><button type="button" className="btn ghost sm" onClick={() => loadRoute(true)}>Refresh</button>{route.distance_m > 0 && Math.abs(route.distance_m - w.distance_m) > 50 && <button type="button" className="btn sm" onClick={async () => { try { setW(await api.post<Workout>(`${V1}/workouts/${w.id}/route/apply`)); toast('Distance taken from the route') } catch (e) { toast((e as Error).message, 'err') } }}>Use this distance</button>}</span>}</div>
-        {route?.connected && route.points.length > 1 && <div className="card-body flush"><RouteMap points={route.points} speeds={speeds} /></div>}
-        {speeds && <div className="card-body"><span className="pace-legend muted small"><span>Slower</span><i /><span>Faster</span></span></div>}
-        {route && !route.connected && <div className="card-body"><p className="muted small">Connect Pocket Movement under <Link to="/settings/apps">Settings → Connected apps</Link> and every workout gets its map, drawn from the positions your phone recorded while it ran.{!settings?.core_configured && <CoreHint />}</p></div>}
-      </section>
-      {detail && (() => {
-        const imperial = settings?.units === 'imperial'
-        const planned = detail.segments.filter(p => p.kind !== 'lap')
-        const laps = detail.segments.filter(p => p.kind === 'lap')
-        const plannedTitle = planned.some(p => p.kind === 'interval') ? 'Intervals' : planned.some(p => p.kind === 'activity') ? 'Activities' : 'Segments'
-        return <>
-          <PartsTable title={plannedTitle} sub={planned.some(p => p.kind === 'interval') ? 'The steps of the planned workout, as run' : undefined} parts={planned} kind={w.kind} imperial={imperial} first="Part" />
-          <PartsTable title="Laps" parts={laps} kind={w.kind} imperial={imperial} first="Lap" />
-          <PartsTable title="Splits" sub={detail.distance_from === 'series' ? `Per ${detail.split_unit === 'mi' ? 'mile' : 'kilometre'}, from the distance the device measured` : `Per ${detail.split_unit === 'mi' ? 'mile' : 'kilometre'}, from the route`} parts={detail.splits} kind={w.kind} imperial={imperial} first={detail.split_unit === 'mi' ? 'Mile' : 'Km'} />
-          <SeriesCharts track={detail} kind={w.kind} imperial={imperial} />
-        </>
-      })()}
-      {elevation.length > 1 && <section className="card"><div className="card-head"><div className="grow"><h2>Elevation</h2><p className="muted small">{w.elevation_m ? `${Math.round(w.elevation_m)} m climbed` : ''}</p></div></div>
-        <div className="card-body"><LineChart points={elevation} color="#22c55e" kind="area" xLabel={x => fmtDistance(+x) === '—' ? '0' : fmtDistance(+x)} format={v => `${Math.round(v)} m`} /></div></section>}
-      <section className="card"><div className="card-head"><div className="grow"><h2>Pocket Habits</h2><p className="muted small">{w.habit_id ? `Ticked habit #${w.habit_id} on ${fmtDate(w.date)}` : w.habit_error ? `Could not tick a habit: ${w.habit_error}` : 'Tick a habit for this workout (rules under Settings → Connected apps do it automatically).'}</p></div></div>
-        <div className="card-body">
-          {habits?.connected ? <div className="row wrap">{habits.habits.map(h => <button key={h.id} type="button" className={`chip ${w.habit_id === h.id ? 'active' : ''}`} onClick={() => tick(h.id)}><Icon name="habit" size={13} />{h.name}</button>)}{habits.habits.length === 0 && <span className="muted small">No habits in Pocket Habits yet.</span>}</div>
-            : <p className="muted small">Pocket Habits is not connected. <Link to="/settings/apps">Connect it</Link></p>}
+    <div className="stack loose wo-page">
+      <section className="card wo-hero">
+        <div className="wo-hero-top">
+          <span className="wo-hero-ico" style={{ '--tile': '#22c55e' } as React.CSSProperties}><Icon name={KIND_ICON[w.kind] || 'activity'} size={22} /></span>
+          <div className="grow" style={{ minWidth: 0 }}>
+            <h1>{w.name || w.kind}</h1>
+            <div className="wo-meta">
+              <span>{weekday(w.date)}, {fmtDate(w.date)}</span>
+              <span>{fmtISOTime(w.start_at)}{w.end_at ? `–${fmtISOTime(w.end_at)}` : ''}</span>
+              {place && <span className="row" style={{ gap: 4 }}><Icon name="pin" size={13} />{place}</span>}
+            </div>
+            {(w.device || temp !== null) && <div className="wo-tags">
+              {w.device && <span className="wo-tag"><Icon name="smartphone" size={13} />{w.device}</span>}
+              {temp !== null && <span className="wo-tag"><Icon name="thermometer" size={13} />{temp}°{w.humidity !== null ? ` · ${Math.round(w.humidity)}% humidity` : ''}</span>}
+            </div>}
+          </div>
+          <div className="wo-hero-actions"><button type="button" className="btn sm" onClick={() => setEdit(true)}><Icon name="edit" size={14} />Edit</button><button type="button" className="btn ghost sm danger-text" onClick={() => setDel(true)}>Delete</button></div>
         </div>
+        <WorkoutSummary big={big} minor={minor} />
+      </section>
+      {w.notes && <section className="card"><div className="card-body"><p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{w.notes}</p></div></section>}
+      {hasMap ? <section className="card wo-map">
+          <div className="wo-map-frame"><RouteMap points={route!.points} speeds={speeds} />{speeds && <span className="pace-legend wo-map-legend"><span>Slower</span><i /><span>Faster</span></span>}</div>
+          <div className="wo-map-foot"><Icon name="route" size={14} /><span className="grow muted small">{routeNote}</span>{routeActions}</div>
+        </section>
+        : <div className="wo-noroute"><Icon name="route" size={16} /><span className="grow">{routeNote}{route && !route.connected && <> Connect it under <Link to="/settings/apps">Settings → Connected apps</Link> to get a map for every workout.{!settings?.core_configured && <CoreHint />}</>}</span>{routeActions}</div>}
+      {detail && <>
+        <PartsTable title={plannedTitle} sub={planned.some(p => p.kind === 'interval') ? 'The steps of the planned workout, as run' : undefined} parts={planned} kind={w.kind} imperial={imperial} first="Part" />
+        <PartsTable title="Laps" parts={laps} kind={w.kind} imperial={imperial} first="Lap" />
+        <PartsTable title="Splits" sub={`Per ${splitWord}, ${detail.distance_from === 'series' ? 'from the distance the device measured' : 'from the route'}`} parts={detail.splits} kind={w.kind} imperial={imperial} first={detail.split_unit === 'mi' ? 'Mile' : 'Km'} />
+      </>}
+      {(elevation.length > 1 || detail) && <div className="wo-charts">
+        {detail && <SeriesCharts track={detail} kind={w.kind} imperial={imperial} />}
+        {elevation.length > 1 && <ChartCard title="Elevation" color="#22c55e" value={w.elevation_m ? String(Math.round(w.elevation_m)) : undefined} unit="m" note={`climbed · ${Math.round(elevRange![0])}–${Math.round(elevRange![1])} m`}>
+          <LineChart points={elevation} color="#22c55e" kind="area" height={170} xLabel={x => fmtDistance(+x) === '—' ? '0' : fmtDistance(+x)} format={v => `${Math.round(v)} m`} />
+        </ChartCard>}
+      </div>}
+      <section className="card wo-habits"><div className="wo-habits-row">
+        <span className="wo-minor-ico" style={{ '--tile': 'var(--accent)' } as React.CSSProperties}><Icon name="habit" size={15} /></span>
+        <div className="grow" style={{ minWidth: 0 }}><h2>Pocket Habits</h2><p className="muted small">{w.habit_id ? `Ticked habit #${w.habit_id} on ${fmtDate(w.date)}` : w.habit_error ? `Could not tick a habit: ${w.habit_error}` : 'Tick a habit for this workout (rules under Settings → Connected apps do it automatically).'}</p></div>
+        {!habits?.connected && <Link className="btn sm" to="/settings/apps">Connect</Link>}
+      </div>
+        {habits?.connected && <div className="row wrap wo-habits-chips">{habits.habits.map(h => <button key={h.id} type="button" className={`chip ${w.habit_id === h.id ? 'active' : ''}`} onClick={() => tick(h.id)}><Icon name="habit" size={13} />{h.name}</button>)}{habits.habits.length === 0 && <span className="muted small">No habits in Pocket Habits yet.</span>}</div>}
       </section>
       {edit && <WorkoutModal workout={w} onClose={() => setEdit(false)} onSaved={() => { setEdit(false); load() }} />}
       {del && <Confirm title="Delete this workout?" message="It is removed here; the phone may send it again on the next sync." confirmLabel="Delete" onCancel={() => setDel(false)} onConfirm={remove} />}

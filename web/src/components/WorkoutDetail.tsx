@@ -1,6 +1,8 @@
-// What was recorded along a workout: the series as charts over time, and the
-// parts (intervals, laps, splits) as tables with what each one took.
+// What was recorded along a workout: the summary at the top, the series as
+// charts over time, and the parts (intervals, laps, splits) as tables with
+// what each one took.
 import { LineChart } from './Chart'
+import { Icon } from './icons'
 import { clock, thin } from '../lib/track'
 import type { TrackPart, WorkoutTrack } from '../lib/types'
 import { fmtDistance, fmtPace } from '../lib/units'
@@ -14,8 +16,37 @@ export function speedText(kind: string, ms: number, imperial: boolean): string {
   return imperial ? `${(ms * 2.236936).toFixed(1)} mph` : `${(ms * 3.6).toFixed(1)} km/h`
 }
 
-const CHARTS: { key: string; title: string; color: string; format: (v: number, kind: string, imperial: boolean) => string }[] = [
-  { key: 'heart_rate', title: 'Heart rate', color: '#ef4444', format: v => `${Math.round(v)}` },
+/** "3.48 km" → ["3.48", "km"], "9:18/km" → ["9:18", "/km"], so the number can be big and the unit small. */
+function valueUnit(s: string): [string, string] {
+  const m = s.match(/^([\d.,:]+)\s*(.*)$/)
+  return m ? [m[1], m[2]] : [s, '']
+}
+
+export type BigStat = { label: string; value: string }
+export type MinorStat = { icon: string; label: string; value: React.ReactNode; color?: string }
+
+/** The workout at a glance: up to four big numbers and a row of smaller ones. */
+export function WorkoutSummary({ big, minor }: { big: BigStat[]; minor: MinorStat[] }) {
+  return <>
+    {big.length > 0 && <div className="wo-big">{big.map(s => {
+      const [v, u] = valueUnit(s.value)
+      return <div key={s.label} className="wo-big-item"><span className="wo-big-v tnum">{v}{u && <small>{u}</small>}</span><span className="wo-big-l">{s.label}</span></div>
+    })}</div>}
+    {minor.length > 0 && <div className="wo-minor">{minor.map(s =>
+      <div key={s.label} className="wo-minor-item"><span className="wo-minor-ico" style={{ '--tile': s.color || 'var(--muted)' } as React.CSSProperties}><Icon name={s.icon} size={15} /></span>
+        <span className="wo-minor-txt"><span className="wo-minor-l">{s.label}</span><span className="wo-minor-v tnum">{s.value}</span></span></div>)}</div>}
+  </>
+}
+
+/** An effort score out of ten as ten little bars. */
+export function EffortMeter({ value }: { value: number }) {
+  const v = Math.max(0, Math.min(10, Math.round(value)))
+  const color = v <= 3 ? '#22c55e' : v <= 6 ? '#eab308' : v <= 8 ? '#f97316' : '#ef4444'
+  return <span className="effort-meter" aria-hidden="true">{Array.from({ length: 10 }, (_, i) => <i key={i} style={i < v ? { background: color } : undefined} />)}</span>
+}
+
+const CHARTS: { key: string; title: string; color: string; unit?: string; format: (v: number, kind: string, imperial: boolean) => string }[] = [
+  { key: 'heart_rate', title: 'Heart rate', color: '#ef4444', unit: 'bpm', format: v => `${Math.round(v)}` },
   { key: 'speed', title: 'Pace', color: '#06b6d4', format: (v, k, imp) => speedText(k, v, imp) },
   { key: 'power', title: 'Power', color: '#f59e0b', format: v => `${Math.round(v)} W` },
   { key: 'cadence', title: 'Cadence', color: '#a855f7', format: v => `${Math.round(v)}` },
@@ -26,38 +57,57 @@ const CHARTS: { key: string; title: string; color: string; format: (v: number, k
 
 function avg(pts: [number, number][]) { return pts.length ? pts.reduce((a, p) => a + p[1], 0) / pts.length : 0 }
 
+/** A chart in a card, with its headline number on the right. */
+export function ChartCard({ title, value, unit, note, color, children }: { title: string; value?: string; unit?: string; note?: string; color: string; children: React.ReactNode }) {
+  return <section className="card wo-chart">
+    <div className="wo-chart-head"><span className="wo-chart-dot" style={{ background: color }} /><h2 className="grow">{title}</h2>
+      {value && <span className="wo-chart-v tnum">{value}{unit && <small>{unit}</small>}{note && <span className="wo-chart-note">{note}</span>}</span>}</div>
+    <div className="wo-chart-body">{children}</div>
+  </section>
+}
+
 /** One chart per series the workout has, x in minutes:seconds from the start. */
 export function SeriesCharts({ track, kind, imperial }: { track: WorkoutTrack; kind: string; imperial: boolean }) {
   return <>{CHARTS.filter(c => (track.series[c.key]?.length || 0) > 1).map(c => {
     const pts = track.series[c.key]
     const title = c.key === 'speed' && !PACED.has(kind) ? 'Speed' : c.key === 'cadence' && kind === 'cycling' ? 'Cadence (rpm)' : c.key === 'cadence' ? 'Cadence (steps/min)' : c.title
     const max = Math.max(...pts.map(p => p[1]))
-    return <section key={c.key} className="card"><div className="card-head"><div className="grow"><h2>{title}</h2>
-      <p className="muted small">Average {c.format(avg(pts), kind, imperial)}{c.key !== 'speed' ? ` · max ${c.format(max, kind, imperial)}` : ` · best ${c.format(max, kind, imperial)}`}</p></div></div>
-      <div className="card-body"><LineChart points={thin(pts, 400).map(([t, v]) => ({ x: String(t), y: v }))} color={c.color} kind={c.key === 'heart_rate' ? 'area' : 'line'} xLabel={x => clock(+x)} format={v => c.format(v, kind, imperial)} /></div></section>
+    const [v, u] = valueUnit(c.format(avg(pts), kind, imperial))
+    return <ChartCard key={c.key} title={title} color={c.color} value={v} unit={c.unit || u} note={`avg · ${c.key === 'speed' ? 'best' : 'max'} ${c.format(max, kind, imperial)}`}>
+      <LineChart points={thin(pts, 400).map(([t, y]) => ({ x: String(t), y }))} color={c.color} kind={c.key === 'heart_rate' ? 'area' : 'line'} xLabel={x => clock(+x)} format={y => c.format(y, kind, imperial)} height={170} />
+    </ChartCard>
   })}</>
 }
 
 const PURPOSE: Record<string, string> = { warmup: 'Warm-up', work: 'Work', recovery: 'Recovery', cooldown: 'Cool-down' }
 
-/** Intervals, laps or splits with time, distance, pace and the averages over each. */
+/** Intervals, laps or splits with time, distance, pace and the averages over each.
+ *  The pace column carries a bar, longer for the faster parts, so the rhythm of a session shows at a glance. */
 export function PartsTable({ title, sub, parts, kind, imperial, first }: { title: string; sub?: string; parts: TrackPart[]; kind: string; imperial: boolean; first: string }) {
   if (!parts.length) return null
   const has = (k: keyof TrackPart) => parts.some(p => !!p[k])
   const cols = { goal: has('goal'), dist: has('distance_m'), speed: has('speed_ms'), hr: has('hr_avg'), power: has('power_avg'), cad: has('cadence_avg'), climb: has('climb_m') }
+  // a part of a few metres has no meaningful pace
+  const speedOf = (p: TrackPart) => p.distance_m >= 50 && p.speed_ms ? p.speed_ms : 0
+  const top = Math.max(...parts.map(speedOf), 0)
+  const low = Math.min(...parts.map(speedOf).filter(v => v > 0), top)
+  const barPct = (s: number) => !s || !top ? 0 : top === low ? 100 : 35 + 65 * ((s - low) / (top - low))
   return <section className="card"><div className="card-head"><div className="grow"><h2>{title}</h2>{sub && <p className="muted small">{sub}</p>}</div></div>
-    <div className="card-body flush"><table className="table compact parts"><thead><tr>
-      <th>{first}</th>{cols.goal && <th>Goal</th>}<th className="right">Time</th>{cols.dist && <th className="right">Distance</th>}{cols.speed && <th className="right">{PACED.has(kind) ? 'Pace' : 'Speed'}</th>}
+    <div className="card-body flush"><table className="table parts"><thead><tr>
+      <th>{first}</th>{cols.goal && <th>Goal</th>}<th className="right">Time</th>{cols.dist && <th className="right">Distance</th>}{cols.speed && <th className="pace-col">{PACED.has(kind) ? 'Pace' : 'Speed'}</th>}
       {cols.hr && <th className="right">Heart rate</th>}{cols.power && <th className="right">Power</th>}{cols.cad && <th className="right">Cadence</th>}{cols.climb && <th className="right">Climb</th>}
-    </tr></thead><tbody>{parts.map((p, i) => <tr key={i} className={p.purpose ? `purpose-${p.purpose}` : ''}>
-      <td>{p.kind === 'split' ? (p.n && Math.abs(p.distance_m - (imperial ? 1609.344 : 1000)) > 2 ? fmtDistance(p.distance_m) : p.n) : <span className="row" style={{ gap: 6 }}>{p.purpose && <i className="purpose-dot" />}{p.label || PURPOSE[p.purpose || ''] || p.kind}</span>}</td>
-      {cols.goal && <td className="muted">{p.goal || ''}</td>}
-      <td className="right tnum">{clock(p.duration_s)}</td>
-      {cols.dist && <td className="right tnum">{p.distance_m ? fmtDistance(p.distance_m) : '—'}</td>}
-      {cols.speed && <td className="right tnum">{speedText(kind, p.speed_ms || 0, imperial)}</td>}
-      {cols.hr && <td className="right tnum">{p.hr_avg ? `${p.hr_avg}${p.hr_max ? ` / ${p.hr_max}` : ''}` : '—'}</td>}
-      {cols.power && <td className="right tnum">{p.power_avg ? `${p.power_avg} W` : '—'}</td>}
-      {cols.cad && <td className="right tnum">{p.cadence_avg || '—'}</td>}
-      {cols.climb && <td className="right tnum">{Math.round(p.climb_m)} m</td>}
-    </tr>)}</tbody></table></div></section>
+    </tr></thead><tbody>{parts.map((p, i) => {
+      const s = speedOf(p)
+      return <tr key={i} className={p.purpose ? `purpose-${p.purpose}` : ''}>
+        <td className="part-name">{p.kind === 'split' ? (p.n && Math.abs(p.distance_m - (imperial ? 1609.344 : 1000)) > 2 ? fmtDistance(p.distance_m) : p.n) : <span className="row" style={{ gap: 8 }}>{p.purpose && <i className="purpose-dot" />}{p.label || PURPOSE[p.purpose || ''] || p.kind}</span>}</td>
+        {cols.goal && <td className="muted">{p.goal || ''}</td>}
+        <td className="right tnum">{clock(p.duration_s)}</td>
+        {cols.dist && <td className="right tnum">{p.distance_m ? fmtDistance(p.distance_m) : '—'}</td>}
+        {cols.speed && <td className="pace-col"><span className="pace-cell"><span className="pace-bar"><i style={{ width: `${barPct(s)}%` }} /></span><span className="tnum">{s ? speedText(kind, s, imperial) : '—'}</span></span></td>}
+        {cols.hr && <td className="right tnum">{p.hr_avg ? <>{p.hr_avg}{p.hr_max ? <span className="muted"> / {p.hr_max}</span> : null}</> : '—'}</td>}
+        {cols.power && <td className="right tnum">{p.power_avg ? `${p.power_avg} W` : '—'}</td>}
+        {cols.cad && <td className="right tnum">{p.cadence_avg || '—'}</td>}
+        {cols.climb && <td className="right tnum">{Math.round(p.climb_m)} m</td>}
+      </tr>
+    })}</tbody></table></div></section>
 }

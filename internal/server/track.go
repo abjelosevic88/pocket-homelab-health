@@ -1,9 +1,11 @@
 package server
 
 import (
+	"fmt"
 	"math"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/abjelosevic88/pocket-homelab-health/internal/store"
 )
@@ -83,12 +85,80 @@ func buildTrack(t *store.WorkoutTrack, unit string) trackView {
 	for _, sg := range segs {
 		tv.Segments = append(tv.Segments, a.part(sg, sg.StartS, sg.EndS))
 	}
+	tv.Segments = dropAutoSplits(tv.Segments)
 	size := 1000.0
 	if unit == "mi" {
 		size = 1609.344
 	}
 	tv.Splits = a.splits(size)
 	return tv
+}
+
+// dropAutoSplits leaves out the segments a watch records on its own at every
+// kilometre and every mile (two chains running from the start side by side):
+// they are the splits again, which have their own table. A chain counts when it
+// starts at the start, has at least two pieces, and every piece but the last is
+// one kilometre or one mile (within 3%). Segments the person marked stay.
+func dropAutoSplits(parts []partView) []partView {
+	type chain struct{ idx []int }
+	var chains []*chain
+	for i, p := range parts {
+		if p.Kind != "segment" {
+			continue
+		}
+		var into *chain
+		for _, c := range chains {
+			if last := parts[c.idx[len(c.idx)-1]]; math.Abs(last.EndS-p.StartS) <= 1 {
+				into = c
+				break
+			}
+		}
+		if into == nil {
+			into = &chain{}
+			chains = append(chains, into)
+		}
+		into.idx = append(into.idx, i)
+	}
+	drop := map[int]bool{}
+	for _, c := range chains {
+		if len(c.idx) < 2 || parts[c.idx[0]].StartS > 1 {
+			continue
+		}
+		for _, size := range []float64{1000, 1609.344} {
+			ok := true
+			for k, i := range c.idx {
+				d := parts[i].DistanceM
+				if k < len(c.idx)-1 && math.Abs(d-size) > size*0.03 || d > size*1.03 {
+					ok = false
+					break
+				}
+			}
+			if ok {
+				for _, i := range c.idx {
+					drop[i] = true
+				}
+				break
+			}
+		}
+	}
+	if len(drop) == 0 {
+		return parts
+	}
+	out := []partView{}
+	n := 0
+	for i, p := range parts {
+		if drop[i] {
+			continue
+		}
+		if p.Kind == "segment" {
+			n++
+			if strings.HasPrefix(p.Label, "Segment ") {
+				p.Label = fmt.Sprintf("Segment %d", n)
+			}
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // along answers "how far by then" and "what was recorded between then and then".

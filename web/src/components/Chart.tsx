@@ -1,6 +1,6 @@
 // Small SVG charts, no dependencies: a line/area chart with a hover readout,
 // a bar chart, a sparkline, a progress ring and a stacked bar.
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { fmtDate } from '../lib/format'
 
 export type Pt = { x: string; y: number | null; y2?: number | null }
@@ -28,7 +28,18 @@ export function LineChart({ points, height = 180, color = 'var(--accent)', kind 
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [hover, setHover] = useState<number | null>(null)
-  const W = 600, H = height, L = 40, R = 10, T = 12, B = 24
+  // Draw at the real width so text and dots keep their shape (no stretching).
+  const [W, setW] = useState(600)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = () => { const w = Math.round(el.clientWidth); if (w > 0) setW(w) }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const H = height, L = 40, R = 10, T = 12, B = 24
   const vals = points.map(p => p.y).filter((v): v is number => v !== null && !Number.isNaN(v))
   const extra = [goal ?? NaN, band?.[0] ?? NaN, band?.[1] ?? NaN].filter(v => !Number.isNaN(v))
   const [lo, hi] = extent([...vals, ...extra, ...(points.map(p => p.y2).filter((v): v is number => v !== null && v !== undefined))], 0.12, zero || kind === 'bar')
@@ -43,7 +54,7 @@ export function LineChart({ points, height = 180, color = 'var(--accent)', kind 
       open = true
     })
     return d
-  }, [points, lo, hi]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [points, lo, hi, W]) // eslint-disable-line react-hooks/exhaustive-deps
   const path2 = useMemo(() => {
     let d = '', open = false
     points.forEach((p, i) => {
@@ -52,7 +63,7 @@ export function LineChart({ points, height = 180, color = 'var(--accent)', kind 
       open = true
     })
     return d
-  }, [points, lo, hi]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [points, lo, hi, W]) // eslint-disable-line react-hooks/exhaustive-deps
   const ticks = useMemo(() => {
     const raw = (hi - lo) / 4
     const mag = Math.pow(10, Math.floor(Math.log10(raw || 1)))
@@ -62,7 +73,7 @@ export function LineChart({ points, height = 180, color = 'var(--accent)', kind 
     for (let t = Math.ceil(lo / step) * step; t <= hi + 1e-9 && out.length < 8; t += step) out.push(+t.toFixed(10))
     return out
   }, [lo, hi])
-  const labelEvery = Math.max(1, Math.ceil(n / 6))
+  const labelEvery = Math.max(1, Math.ceil(n / Math.max(2, Math.min(6, Math.floor((W - L - R) / 80)))))
   const onMove = (e: React.MouseEvent | React.TouchEvent) => {
     const el = ref.current
     if (!el || !n) return
@@ -76,7 +87,7 @@ export function LineChart({ points, height = 180, color = 'var(--accent)', kind 
   const barW = n > 0 ? Math.max(2, ((W - L - R) / n) * 0.7) : 4
   return (
     <div ref={ref} className={`chart ${className}`} onMouseMove={onMove} onMouseLeave={() => setHover(null)} onTouchStart={onMove} onTouchMove={onMove} onTouchEnd={() => setHover(null)}>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ height }} role="img" aria-label="Chart">
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label="Chart">
         {ticks.map((t, i) => <g key={i}><line className="grid" x1={L} x2={W - R} y1={y(t)} y2={y(t)} /><text className="tick" x={L - 6} y={y(t) + 4} textAnchor="end">{format(t)}</text></g>)}
         {band && <rect className="band" x={L} width={W - L - R} y={y(band[1])} height={Math.max(0, y(band[0]) - y(band[1]))} />}
         {goal !== undefined && <g><line className="goal" x1={L} x2={W - R} y1={y(goal)} y2={y(goal)} /><text className="goal-label" x={L + 4} y={y(goal) - 5} textAnchor="start">{goalLabel || `goal ${format(goal)}`}</text></g>}
