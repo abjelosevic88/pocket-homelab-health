@@ -165,9 +165,13 @@ export function WorkoutPage() {
   const routeNote = !route ? 'Looking for the positions recorded during the workout…' : route.source === 'phone' ? `Recorded by ${w.device || 'the phone'} · ${route.n.toLocaleString()} positions · ${fmtDistance(route.distance_m)}` : !route.connected ? `Pocket Movement is not connected${route.detail ? `: ${route.detail}` : ''}.` : route.detail ? `Could not read the route: ${route.detail}` : route.n === 0 ? 'No route: nothing was recorded between the start and the end of this workout.' : `${route.n.toLocaleString()} positions from Pocket Movement · ${fmtDistance(route.distance_m)} recorded${w.distance_m ? ` (the workout says ${fmtDistance(w.distance_m)})` : ''}`
   const routeActions = route?.connected && route.source !== 'phone' && <span className="row" style={{ gap: 6 }}><button type="button" className="btn ghost sm" onClick={() => loadRoute(true)}><Icon name="refresh" size={14} />Refresh</button>{route.distance_m > 0 && Math.abs(route.distance_m - w.distance_m) > 50 && <button type="button" className="btn sm" onClick={async () => { try { setW(await api.post<Workout>(`${V1}/workouts/${w.id}/route/apply`)); toast('Distance taken from the route') } catch (e) { toast((e as Error).message, 'err') } }}>Use this distance</button>}</span>
   const elevRange = elevation.length > 1 ? [Math.min(...elevation.map(p => p.y)), Math.max(...elevation.map(p => p.y))] : null
-  const planned = detail ? detail.segments.filter(p => p.kind !== 'lap') : []
-  const laps = detail ? detail.segments.filter(p => p.kind === 'lap') : []
-  const plannedTitle = planned.some(p => p.kind === 'interval') ? 'Intervals' : planned.some(p => p.kind === 'activity') ? 'Activities' : 'Segments'
+  // One list of parts: the planned steps when there are any, else the activities of a
+  // multisport workout, else the segments marked by hand. Never a mix, so an older phone's
+  // automatic splits do not sit between the steps.
+  const of = (k: string) => detail ? detail.segments.filter(p => p.kind === k) : []
+  const plannedTitle = of('interval').length ? 'Intervals' : of('activity').length ? 'Activities' : 'Segments'
+  const planned = of(plannedTitle === 'Intervals' ? 'interval' : plannedTitle === 'Activities' ? 'activity' : 'segment')
+  const laps = of('lap')
   const splitWord = detail?.split_unit === 'mi' ? 'mile' : 'kilometre'
   return (
     <div className="stack loose wo-page">

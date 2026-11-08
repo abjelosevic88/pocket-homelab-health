@@ -94,7 +94,9 @@ func (s *Store) UpsertWorkouts(ctx context.Context, uid int64, in []Workout) (in
 // (Apple Health saves the route a moment after the workout) keeps the part
 // already here.
 func (s *Store) putTrack(ctx context.Context, w *Workout) error {
-	if len(w.Route) == 0 && len(w.Series) == 0 && len(w.Segments) == 0 {
+	// Segments sent as an empty list replace the ones here (a newer phone found none); left
+	// out, they stay.
+	if len(w.Route) == 0 && len(w.Series) == 0 && w.Segments == nil {
 		return nil
 	}
 	enc := func(v any, empty bool) any {
@@ -104,7 +106,7 @@ func (s *Store) putTrack(ctx context.Context, w *Workout) error {
 		b, _ := json.Marshal(v)
 		return string(b)
 	}
-	route, series, segs := enc(w.Route, len(w.Route) == 0), enc(w.Series, len(w.Series) == 0), enc(w.Segments, len(w.Segments) == 0)
+	route, series, segs := enc(w.Route, len(w.Route) == 0), enc(w.Series, len(w.Series) == 0), enc(w.Segments, w.Segments == nil)
 	_, err := s.DB.ExecContext(ctx, `INSERT INTO workout_tracks (workout_id, route, series, segments, updated_at) VALUES (?, COALESCE(?, '[]'), COALESCE(?, '{}'), COALESCE(?, '[]'), ?)
 		ON CONFLICT(workout_id) DO UPDATE SET route = COALESCE(?, route), series = COALESCE(?, series), segments = COALESCE(?, segments), updated_at = excluded.updated_at`,
 		w.ID, route, series, segs, Now(), route, series, segs)

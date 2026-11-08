@@ -514,6 +514,13 @@ func TestWorkoutTrackFromPhone(t *testing.T) {
 	if num(wk, "effort") != 7 || num(wk, "elevation_m") != 40 {
 		t.Fatalf("resend lost effort or climb: %v", wk)
 	}
+	// a newer phone found no parts after all (they were the watch's automatic splits): an empty list clears them
+	w["segments"] = []any{}
+	a.ok(a.alice, "POST", "/api/v1/ingest?source=pocket-homelab", map[string]any{"workouts": []any{w}})
+	tr = a.ok(a.alice, "GET", fmt.Sprintf("/api/v1/workouts/%d/track", id), nil)
+	if len(tr["segments"].([]any)) != 0 || len(tr["route"].([]any)) != 21 {
+		t.Fatalf("empty segments did not clear: %v", tr["segments"])
+	}
 	a.expect(404, a.bob, "GET", fmt.Sprintf("/api/v1/workouts/%d/track", id), nil)
 }
 
