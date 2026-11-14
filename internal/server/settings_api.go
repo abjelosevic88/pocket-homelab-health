@@ -49,6 +49,10 @@ func (s *Server) publicSettings(ctx context.Context, u *store.User, st store.Set
 		"movement_url": st.MovementURL, "movement_token": mask(st.MovementToken), "movement_public_url": st.MovementPublicURL,
 		"ai_provider": st.AIProvider, "ai_pocket_model": st.AIPocketModel, "openai_api_key": mask(st.OpenAIKey), "openai_model": st.OpenAIModel, "openai_base_url": st.OpenAIBaseURL,
 		"weather_enabled": st.WeatherEnabled, "weather_lat": st.WeatherLat, "weather_lon": st.WeatherLon, "weather_place": st.WeatherPlace, "weather_last": st.WeatherLast,
+		"notify_workouts": st.NotifyWorkouts,
+		"webhook_url":     st.WebhookURL, "webhook_secret": mask(st.WebhookSecret), "webhook_events": nonNil(st.WebhookEvents), "webhook_track": st.WebhookTrack,
+		"webhook_topics": eventTopics,
+		"hr_zones":       floatsOr(st.HRZones), "max_hr": st.MaxHR, "power_zones": floatsOr(st.PowerZones), "hr_zones_in_effect": s.zonesFor(ctx, u.ID).HR,
 		"prefer_device":    st.PreferDevice,
 		"max_upload_bytes": s.cfg.MaxUploadBytes, "setup_complete": st.SetupComplete, "base_url": s.cfg.BaseURL,
 	}
@@ -177,6 +181,37 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	boolIn("notify_weekly", &cur.NotifyWeekly, in.NotifyWeekly)
 	boolIn("notify_meds", &cur.NotifyMeds, in.NotifyMeds)
 	boolIn("notify_inactive", &cur.NotifyInactive, in.NotifyInactive)
+	boolIn("notify_workouts", &cur.NotifyWorkouts, in.NotifyWorkouts)
+	if keys["webhook_url"] {
+		v := strings.TrimSpace(in.WebhookURL)
+		if v != "" && !strings.HasPrefix(v, "http://") && !strings.HasPrefix(v, "https://") {
+			writeErr(w, http.StatusBadRequest, "the webhook address starts with http:// or https://")
+			return
+		}
+		cur.WebhookURL = v
+	}
+	secret("webhook_secret", &cur.WebhookSecret, in.WebhookSecret)
+	if keys["webhook_events"] {
+		ev := []string{}
+		for _, e := range in.WebhookEvents {
+			for _, t := range eventTopics {
+				if e == t {
+					ev = append(ev, e)
+				}
+			}
+		}
+		cur.WebhookEvents = ev
+	}
+	boolIn("webhook_track", &cur.WebhookTrack, in.WebhookTrack)
+	if keys["hr_zones"] {
+		cur.HRZones = ascending(in.HRZones)
+	}
+	if keys["power_zones"] {
+		cur.PowerZones = ascending(in.PowerZones)
+	}
+	if keys["max_hr"] && in.MaxHR >= 0 && in.MaxHR < 250 {
+		cur.MaxHR = in.MaxHR
+	}
 	url("habits_url", &cur.HabitsURL, in.HabitsURL)
 	secret("habits_token", &cur.HabitsToken, in.HabitsToken)
 	url("habits_public_url", &cur.HabitsPublicURL, in.HabitsPublicURL)
@@ -323,6 +358,13 @@ func (s *Server) handleIntegrationTest(w http.ResponseWriter, r *http.Request) {
 		n := notify.New(urlOr(st.NotifyURL), f)
 		err = n.Send(ctx, notify.Message{Title: "Pocket Health", Body: "Notifications work. Met goals, medication reminders and the weekly report will arrive here.", Priority: "info", Tags: []string{"heart"}})
 		msg = "Test message sent via " + n.Format
+	} else if in.Which == "webhook" {
+		if st.WebhookURL == "" {
+			err = fmt.Errorf("no webhook address saved")
+		} else {
+			err = s.sendWebhook(ctx, st, "health.test", "test", map[string]any{"message": "Pocket Health webhooks work."})
+			msg = "Test event sent to " + st.WebhookURL
+		}
 	} else {
 		writeErr(w, http.StatusBadRequest, "unknown integration")
 		return
@@ -554,4 +596,18 @@ func validBloodType(v string) bool {
 		return true
 	}
 	return false
+}
+
+func nonNil(v []string) []string {
+	if v == nil {
+		return []string{}
+	}
+	return v
+}
+
+func floatsOr(v []float64) []float64 {
+	if v == nil {
+		return []float64{}
+	}
+	return v
 }

@@ -1,6 +1,9 @@
 package store
 
-import "strings"
+import (
+	"math"
+	"strings"
+)
 
 // User is an account on this box.
 type User struct {
@@ -82,10 +85,16 @@ type Workout struct {
 	// Apple's effort rating, 1–10: the one the person gave and the watch's estimate.
 	Effort          *float64 `json:"effort"`
 	EffortEstimated *float64 `json:"effort_estimated"`
+	// The planned (WorkoutKit custom) workout this session ran: its id and display name.
+	// A workout with a plan name carries it as its name too.
+	PlanID   string `json:"plan_id"`
+	PlanName string `json:"plan_name"`
 	// What was recorded along the way; written to workout_tracks, read with WorkoutTrack.
 	Route    [][4]float64     `json:"-"`
 	Series   Series           `json:"-"`
 	Segments []WorkoutSegment `json:"-"`
+	// The spacing of Series in seconds, 0 = the device's own rate; nil = worked out from the points.
+	SeriesStep *float64 `json:"-"`
 }
 
 // Series holds quantities recorded along a workout: key → [[seconds from the
@@ -100,21 +109,99 @@ type Series map[string][][2]float64
 // an interval of a planned workout (purpose warmup, work, recovery, cooldown)
 // or one activity of a multisport workout. Times are seconds from the start.
 type WorkoutSegment struct {
-	Kind    string  `json:"kind"`              // lap | segment | interval | activity
-	Label   string  `json:"label,omitempty"`   // "Work 3", "Warm-up", "Cycling"
-	Purpose string  `json:"purpose,omitempty"` // warmup | work | recovery | cooldown
-	Goal    string  `json:"goal,omitempty"`    // what the plan asked for: "400 m", "2 min"
-	StartS  float64 `json:"start_s"`
-	EndS    float64 `json:"end_s"`
+	Kind    string `json:"kind"`              // lap | segment | interval | activity
+	Label   string `json:"label,omitempty"`   // "Work 3", "Warm-up", "Cycling"
+	Purpose string `json:"purpose,omitempty"` // warmup | work | recovery | cooldown
+	Goal    string `json:"goal,omitempty"`    // what the plan asked for: "400 m", "2 min"
+	// The step's alert target (a WorkoutKit custom workout): a pace or speed range, a
+	// heart rate range or zone, a cadence or power range, threshold or zone.
+	Target *StepTarget `json:"target,omitempty"`
+	StartS float64     `json:"start_s"`
+	EndS   float64     `json:"end_s"`
+}
+
+// StepTarget is what a planned step asked to hold. Type is heart_rate (bpm),
+// heart_rate_zone (Zone), speed (m/s), pace (s per km, turned into speed on the
+// way in), cadence (per minute), power (W) or power_zone (Zone). A range has Min
+// and Max, a threshold only Min. Metric is "current" (the live value, Apple's
+// default) or "average" (the step's average so far).
+type StepTarget struct {
+	Type   string   `json:"type"`
+	Min    *float64 `json:"min,omitempty"`
+	Max    *float64 `json:"max,omitempty"`
+	Zone   int      `json:"zone,omitempty"`
+	Metric string   `json:"metric,omitempty"`
+}
+
+// Normalize checks a target and brings it to canonical units: a pace range
+// (s/km) becomes a speed range, min and max swap when given the wrong way
+// round. It returns nil for a target that says nothing.
+func (t *StepTarget) Normalize() *StepTarget {
+	if t == nil {
+		return nil
+	}
+	c := *t
+	c.Type = strings.ToLower(strings.TrimSpace(c.Type))
+	c.Type = strings.ReplaceAll(c.Type, "-", "_")
+	switch c.Type {
+	case "hr", "heartrate":
+		c.Type = "heart_rate"
+	case "hr_zone", "heartrate_zone":
+		c.Type = "heart_rate_zone"
+	}
+	pos := func(p *float64) *float64 {
+		if p == nil || *p <= 0 {
+			return nil
+		}
+		v := *p
+		return &v
+	}
+	c.Min, c.Max = pos(c.Min), pos(c.Max)
+	if c.Type == "pace" {
+		// a slower pace is a lower speed: the pace range's max is the speed range's min
+		lo, hi := c.Max, c.Min
+		c.Type, c.Min, c.Max = "speed", nil, nil
+		if lo != nil {
+			v := math.Round(1000 / *lo * 1000) / 1000
+			c.Min = &v
+		}
+		if hi != nil {
+			v := math.Round(1000 / *hi * 1000) / 1000
+			c.Max = &v
+		}
+	}
+	if c.Min != nil && c.Max != nil && *c.Min > *c.Max {
+		c.Min, c.Max = c.Max, c.Min
+	}
+	switch c.Type {
+	case "heart_rate_zone", "power_zone":
+		if c.Zone < 1 || c.Zone > 10 {
+			return nil
+		}
+		c.Min, c.Max = nil, nil
+	case "heart_rate", "speed", "cadence", "power":
+		c.Zone = 0
+		if c.Min == nil && c.Max == nil {
+			return nil
+		}
+	default:
+		return nil
+	}
+	if c.Metric != "average" {
+		c.Metric = "current"
+	}
+	return &c
 }
 
 // WorkoutTrack is what was recorded along a workout: the route ([lat, lng,
 // altitude m, seconds from the start]), the series and the segments.
 type WorkoutTrack struct {
-	Route     [][4]float64     `json:"route"`
-	Series    Series           `json:"series"`
-	Segments  []WorkoutSegment `json:"segments"`
-	UpdatedAt string           `json:"updated_at"`
+	Route    [][4]float64     `json:"route"`
+	Series   Series           `json:"series"`
+	Segments []WorkoutSegment `json:"segments"`
+	// The spacing the series were sent at in seconds; 0 = the device's own rate.
+	SeriesStep float64 `json:"series_step"`
+	UpdatedAt  string  `json:"updated_at"`
 }
 
 // SleepSession is one night; Date is the morning.
@@ -268,7 +355,23 @@ type Settings struct {
 	NotifyMeds     bool   `json:"notify_meds"`
 	NotifyInactive bool   `json:"notify_inactive"` // no data from the phone for a day
 	NotifyHour     int    `json:"notify_hour"`
-	WeeklyDay      int    `json:"weekly_day"` // ISO weekday the weekly report goes out
+	WeeklyDay      int    `json:"weekly_day"`      // ISO weekday the weekly report goes out
+	NotifyWorkouts bool   `json:"notify_workouts"` // a push for every new workout
+
+	// A webhook for setups without Pocket Core: the events picked (health.workout_recorded…)
+	// are POSTed as JSON, signed with the secret (X-Pocket-Signature: sha256=…).
+	WebhookURL    string   `json:"webhook_url"`
+	WebhookSecret string   `json:"webhook_secret"`
+	WebhookEvents []string `json:"webhook_events"`
+	// health.workout_recorded carries the workout's track (series, steps with their targets, splits).
+	WebhookTrack bool `json:"webhook_track"`
+
+	// Heart rate and power zones for the targets of planned steps: the top of zones 1–4
+	// (zone 5 is above the last). Empty heart rate zones are worked out from MaxHR (else
+	// 220 − age) and the latest resting heart rate.
+	HRZones    []float64 `json:"hr_zones"`
+	MaxHR      float64   `json:"max_hr"`
+	PowerZones []float64 `json:"power_zones"`
 
 	HabitsMode      string `json:"habits_mode"`
 	HabitsURL       string `json:"habits_url"`

@@ -66,6 +66,12 @@ type Generic struct {
 		Segments        []store.WorkoutSegment `json:"segments"`
 		Effort          *float64               `json:"effort"`
 		EffortEstimated *float64               `json:"effort_estimated"`
+		// The planned (WorkoutKit custom) workout it ran: id and display name ("title" works too).
+		PlanID   string `json:"plan_id"`
+		PlanName string `json:"plan_name"`
+		Title    string `json:"title"`
+		// The spacing of series in seconds; 0 = the device's own rate. Left out, it is worked out.
+		SeriesStep *float64 `json:"series_step"`
 	} `json:"workouts"`
 	// Symptoms another app recorded; external_id makes a second copy update the first.
 	Symptoms []struct {
@@ -170,7 +176,11 @@ func Pocket(raw []byte, source string) (*Batch, error) {
 		}
 		wo := store.Workout{Kind: w.Kind, Name: w.Name, StartAt: RFC(start), DurationS: w.DurationS, DistanceM: w.DistanceM, EnergyKcal: w.EnergyKcal, AvgHR: w.AvgHR, MaxHR: w.MaxHR, ElevationM: w.ElevationM, Steps: w.Steps, Notes: w.Notes, Source: source, Device: w.Device, ExternalID: w.ExternalID, Temperature: w.Temp,
 			Humidity: w.Humidity, TotalKcal: w.TotalKcal, Place: w.Place, Route: w.Route,
-			Series: w.Series, Segments: w.Segments, Effort: w.Effort, EffortEstimated: w.EffortEstimated}
+			Series: w.Series, Segments: w.Segments, Effort: w.Effort, EffortEstimated: w.EffortEstimated,
+			PlanID: w.PlanID, PlanName: w.PlanName, SeriesStep: w.SeriesStep}
+		if wo.PlanName == "" {
+			wo.PlanName = w.Title
+		}
 		if len(w.HeartRate) > 0 && len(wo.Series["heart_rate"]) == 0 {
 			if wo.Series == nil {
 				wo.Series = store.Series{}

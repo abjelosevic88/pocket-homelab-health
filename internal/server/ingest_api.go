@@ -76,7 +76,8 @@ func (s *Server) applyBatch(ctx context.Context, uid int64, b *ingest.Batch, sou
 		if w, err := s.store.GetWorkout(ctx, uid, id); err == nil {
 			s.publish(ctx, uid, "health.workout_recorded", fmt.Sprintf("workout:%d", w.ID), map[string]any{
 				"workout_id": w.ID, "kind": w.Kind, "name": w.Name, "date": w.Date, "start_at": w.StartAt, "duration_s": w.DurationS,
-				"distance_m": w.DistanceM, "energy_kcal": w.EnergyKcal, "avg_hr": w.AvgHR, "source": w.Source})
+				"distance_m": w.DistanceM, "energy_kcal": w.EnergyKcal, "avg_hr": w.AvgHR, "max_hr": w.MaxHR, "end_at": w.EndAt, "source": w.Source,
+				"plan_id": w.PlanID, "plan_name": w.PlanName, "external_id": w.ExternalID, "device": w.Device})
 		}
 	}
 	for _, id := range freshSleep {

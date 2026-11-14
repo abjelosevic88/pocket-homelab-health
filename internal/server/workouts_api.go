@@ -20,7 +20,7 @@ func (s *Server) handleListWorkouts(w http.ResponseWriter, r *http.Request) {
 	if limit <= 0 || limit > 1000 {
 		limit = 100
 	}
-	list, err := s.store.ListWorkouts(ctx, actorID(ctx), store.WorkoutFilter{From: from, To: to, Kind: r.URL.Query().Get("kind"), Limit: limit, Offset: queryInt(r, "offset")})
+	list, err := s.store.ListWorkouts(ctx, actorID(ctx), store.WorkoutFilter{From: from, To: to, Kind: r.URL.Query().Get("kind"), PlanID: strings.TrimSpace(r.URL.Query().Get("plan_id")), Limit: limit, Offset: queryInt(r, "offset")})
 	if err != nil {
 		s.fail(w, err, "workouts")
 		return

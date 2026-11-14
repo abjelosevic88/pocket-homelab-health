@@ -5,16 +5,78 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
+	"sort"
+	"strings"
 	"time"
 )
 
-const workoutCols = `id, user_id, kind, name, start_at, end_at, date, duration_s, distance_m, energy_kcal, total_kcal, avg_hr, max_hr, elevation_m, steps, temperature, humidity, place, effort, effort_estimated, source, device, external_id, notes, habit_id, habit_marked_at, habit_error, created_at, updated_at`
+// MaxSeriesPoints caps one series of one workout (eight hours at one reading a second).
+const MaxSeriesPoints = 28800
+
+// Clean sorts each series by time, drops readings before the start or not a
+// number, and thins a series past MaxSeriesPoints evenly.
+func (s Series) Clean() Series {
+	out := Series{}
+	for k, pts := range s {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		c := make([][2]float64, 0, len(pts))
+		for _, p := range pts {
+			if p[0] < 0 || math.IsNaN(p[0]) || math.IsNaN(p[1]) || math.IsInf(p[1], 0) || math.IsInf(p[0], 0) {
+				continue
+			}
+			c = append(c, p)
+		}
+		sort.SliceStable(c, func(i, j int) bool { return c[i][0] < c[j][0] })
+		if n := len(c); n > MaxSeriesPoints {
+			th := make([][2]float64, 0, MaxSeriesPoints)
+			for i := 0; i < MaxSeriesPoints; i++ {
+				th = append(th, c[i*n/MaxSeriesPoints])
+			}
+			c = th
+		}
+		if len(c) > 0 {
+			out[k] = c
+		}
+	}
+	return out
+}
+
+// Step works out the spacing the series were sent at: the smallest gap
+// between two readings when every reading sits on a multiple of it (a phone
+// that buckets every 5 s), else 0 (the device's own rate).
+func (s Series) Step() float64 {
+	gap := math.Inf(1)
+	for _, pts := range s {
+		for i := 1; i < len(pts); i++ {
+			if d := pts[i][0] - pts[i-1][0]; d > 1e-6 && d < gap {
+				gap = d
+			}
+		}
+	}
+	if math.IsInf(gap, 1) || gap < 1 {
+		return 0
+	}
+	for _, pts := range s {
+		for _, p := range pts {
+			if r := math.Mod(p[0], gap); r > 1e-6 && gap-r > 1e-6 {
+				return 0
+			}
+		}
+	}
+	return gap
+}
+
+const workoutCols = `id, user_id, kind, name, start_at, end_at, date, duration_s, distance_m, energy_kcal, total_kcal, avg_hr, max_hr, elevation_m, steps, temperature, humidity, place, effort, effort_estimated, plan_id, plan_name, source, device, external_id, notes, habit_id, habit_marked_at, habit_error, created_at, updated_at`
 
 func scanWorkout(row interface{ Scan(...any) error }) (Workout, error) {
 	var w Workout
 	var temp, hum, effort, effortEst sql.NullFloat64
 	var habit sql.NullInt64
-	if err := row.Scan(&w.ID, &w.UserID, &w.Kind, &w.Name, &w.StartAt, &w.EndAt, &w.Date, &w.DurationS, &w.DistanceM, &w.EnergyKcal, &w.TotalKcal, &w.AvgHR, &w.MaxHR, &w.ElevationM, &w.Steps, &temp, &hum, &w.Place, &effort, &effortEst, &w.Source, &w.Device, &w.ExternalID, &w.Notes, &habit, &w.HabitMarkedAt, &w.HabitError, &w.CreatedAt, &w.UpdatedAt); err != nil {
+	if err := row.Scan(&w.ID, &w.UserID, &w.Kind, &w.Name, &w.StartAt, &w.EndAt, &w.Date, &w.DurationS, &w.DistanceM, &w.EnergyKcal, &w.TotalKcal, &w.AvgHR, &w.MaxHR, &w.ElevationM, &w.Steps, &temp, &hum, &w.Place, &effort, &effortEst, &w.PlanID, &w.PlanName, &w.Source, &w.Device, &w.ExternalID, &w.Notes, &habit, &w.HabitMarkedAt, &w.HabitError, &w.CreatedAt, &w.UpdatedAt); err != nil {
 		return w, notFound(err)
 	}
 	w.Temperature, w.Humidity = nf(temp), nf(hum)
@@ -45,6 +107,10 @@ func (s *Store) UpsertWorkouts(ctx context.Context, uid int64, in []Workout) (in
 		if w.Source == "" {
 			w.Source = "manual"
 		}
+		w.PlanID, w.PlanName = strings.TrimSpace(w.PlanID), strings.TrimSpace(w.PlanName)
+		if w.PlanName != "" {
+			w.Name = w.PlanName
+		}
 		// Newer watches keep the climb on the segments rather than the workout: a
 		// workout that arrives without one gets it from its route's altitudes.
 		if w.ElevationM == 0 && len(w.Route) > 1 {
@@ -60,10 +126,12 @@ func (s *Store) UpsertWorkouts(ctx context.Context, uid int64, in []Workout) (in
 		var id int64
 		err := s.DB.QueryRowContext(ctx, `SELECT id FROM workouts WHERE user_id = ? AND start_at = ? AND kind = ? AND source = ?`, uid, w.StartAt, w.Kind, w.Source).Scan(&id)
 		if err == nil {
-			_, err = s.DB.ExecContext(ctx, `UPDATE workouts SET name = ?, end_at = ?, date = ?, duration_s = ?, distance_m = ?, energy_kcal = ?, total_kcal = ?, avg_hr = ?, max_hr = ?, elevation_m = CASE WHEN ? > 0 THEN ? ELSE elevation_m END, steps = ?, temperature = ?, humidity = ?, device = ?, external_id = ?,
+			// a copy sent without its plan (an older phone) keeps the plan's name
+			_, err = s.DB.ExecContext(ctx, `UPDATE workouts SET name = CASE WHEN ? = '' AND plan_name <> '' THEN name ELSE ? END,
+				plan_id = CASE WHEN ? <> '' THEN ? ELSE plan_id END, plan_name = CASE WHEN ? <> '' THEN ? ELSE plan_name END, end_at = ?, date = ?, duration_s = ?, distance_m = ?, energy_kcal = ?, total_kcal = ?, avg_hr = ?, max_hr = ?, elevation_m = CASE WHEN ? > 0 THEN ? ELSE elevation_m END, steps = ?, temperature = ?, humidity = ?, device = ?, external_id = ?,
 				effort = COALESCE(?, effort), effort_estimated = COALESCE(?, effort_estimated),
 				place = CASE WHEN ? <> '' THEN ? ELSE place END, notes = CASE WHEN ? <> '' THEN ? ELSE notes END, updated_at = ? WHERE id = ?`,
-				w.Name, w.EndAt, w.Date, w.DurationS, w.DistanceM, w.EnergyKcal, w.TotalKcal, w.AvgHR, w.MaxHR, w.ElevationM, w.ElevationM, w.Steps, pf(w.Temperature), pf(w.Humidity), w.Device, w.ExternalID, pf(w.Effort), pf(w.EffortEstimated), w.Place, w.Place, w.Notes, w.Notes, Now(), id)
+				w.PlanName, w.Name, w.PlanID, w.PlanID, w.PlanName, w.PlanName, w.EndAt, w.Date, w.DurationS, w.DistanceM, w.EnergyKcal, w.TotalKcal, w.AvgHR, w.MaxHR, w.ElevationM, w.ElevationM, w.Steps, pf(w.Temperature), pf(w.Humidity), w.Device, w.ExternalID, pf(w.Effort), pf(w.EffortEstimated), w.Place, w.Place, w.Notes, w.Notes, Now(), id)
 			if err != nil {
 				return n, fresh, err
 			}
@@ -74,9 +142,9 @@ func (s *Store) UpsertWorkouts(ctx context.Context, uid int64, in []Workout) (in
 			n++
 			continue
 		}
-		res, err := s.DB.ExecContext(ctx, `INSERT INTO workouts (user_id, kind, name, start_at, end_at, date, duration_s, distance_m, energy_kcal, total_kcal, avg_hr, max_hr, elevation_m, steps, temperature, humidity, place, effort, effort_estimated, source, device, external_id, notes)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			uid, w.Kind, w.Name, w.StartAt, w.EndAt, w.Date, w.DurationS, w.DistanceM, w.EnergyKcal, w.TotalKcal, w.AvgHR, w.MaxHR, w.ElevationM, w.Steps, pf(w.Temperature), pf(w.Humidity), w.Place, pf(w.Effort), pf(w.EffortEstimated), w.Source, w.Device, w.ExternalID, w.Notes)
+		res, err := s.DB.ExecContext(ctx, `INSERT INTO workouts (user_id, kind, name, start_at, end_at, date, duration_s, distance_m, energy_kcal, total_kcal, avg_hr, max_hr, elevation_m, steps, temperature, humidity, place, effort, effort_estimated, plan_id, plan_name, source, device, external_id, notes)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			uid, w.Kind, w.Name, w.StartAt, w.EndAt, w.Date, w.DurationS, w.DistanceM, w.EnergyKcal, w.TotalKcal, w.AvgHR, w.MaxHR, w.ElevationM, w.Steps, pf(w.Temperature), pf(w.Humidity), w.Place, pf(w.Effort), pf(w.EffortEstimated), w.PlanID, w.PlanName, w.Source, w.Device, w.ExternalID, w.Notes)
 		if err != nil {
 			return n, fresh, err
 		}
@@ -106,10 +174,22 @@ func (s *Store) putTrack(ctx context.Context, w *Workout) error {
 		b, _ := json.Marshal(v)
 		return string(b)
 	}
+	for i := range w.Segments {
+		w.Segments[i].Target = w.Segments[i].Target.Normalize()
+	}
+	var step any
+	if len(w.Series) > 0 {
+		w.Series = w.Series.Clean()
+		st := w.Series.Step()
+		if w.SeriesStep != nil && *w.SeriesStep >= 0 {
+			st = *w.SeriesStep
+		}
+		step = st
+	}
 	route, series, segs := enc(w.Route, len(w.Route) == 0), enc(w.Series, len(w.Series) == 0), enc(w.Segments, w.Segments == nil)
-	_, err := s.DB.ExecContext(ctx, `INSERT INTO workout_tracks (workout_id, route, series, segments, updated_at) VALUES (?, COALESCE(?, '[]'), COALESCE(?, '{}'), COALESCE(?, '[]'), ?)
-		ON CONFLICT(workout_id) DO UPDATE SET route = COALESCE(?, route), series = COALESCE(?, series), segments = COALESCE(?, segments), updated_at = excluded.updated_at`,
-		w.ID, route, series, segs, Now(), route, series, segs)
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO workout_tracks (workout_id, route, series, segments, series_step, updated_at) VALUES (?, COALESCE(?, '[]'), COALESCE(?, '{}'), COALESCE(?, '[]'), COALESCE(?, 5), ?)
+		ON CONFLICT(workout_id) DO UPDATE SET route = COALESCE(?, route), series = COALESCE(?, series), segments = COALESCE(?, segments), series_step = COALESCE(?, series_step), updated_at = excluded.updated_at`,
+		w.ID, route, series, segs, step, Now(), route, series, segs, step)
 	return err
 }
 
@@ -117,7 +197,7 @@ func (s *Store) putTrack(ctx context.Context, w *Workout) error {
 func (s *Store) WorkoutTrack(ctx context.Context, workoutID int64) (*WorkoutTrack, error) {
 	var route, series, segs string
 	t := &WorkoutTrack{}
-	err := s.DB.QueryRowContext(ctx, `SELECT route, series, segments, updated_at FROM workout_tracks WHERE workout_id = ?`, workoutID).Scan(&route, &series, &segs, &t.UpdatedAt)
+	err := s.DB.QueryRowContext(ctx, `SELECT route, series, segments, series_step, updated_at FROM workout_tracks WHERE workout_id = ?`, workoutID).Scan(&route, &series, &segs, &t.SeriesStep, &t.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -168,6 +248,7 @@ func (s *Store) SetWorkoutPlace(ctx context.Context, uid, id int64, place string
 type WorkoutFilter struct {
 	From, To string
 	Kind     string
+	PlanID   string
 	Limit    int
 	Offset   int
 }
@@ -187,6 +268,10 @@ func (s *Store) ListWorkouts(ctx context.Context, uid int64, f WorkoutFilter) ([
 	if f.Kind != "" {
 		q += ` AND kind = ?`
 		args = append(args, f.Kind)
+	}
+	if f.PlanID != "" {
+		q += ` AND plan_id = ?`
+		args = append(args, f.PlanID)
 	}
 	q += ` ORDER BY start_at DESC`
 	if f.Limit > 0 {

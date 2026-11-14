@@ -19,18 +19,25 @@ const KIND_COLOR: Record<string, string> = { running: '#f97316', walking: '#22c5
 export const kindColor = (k: string) => KIND_COLOR[k] || '#e11d48'
 const ON_FOOT = new Set(['running', 'walking', 'hiking'])
 
+function KindName({ kind }: { kind: string }) {
+  const catalog = useCatalog()
+  return <>{catalog?.workout_kinds.find(k => k.key === kind)?.name || kind}</>
+}
+
 export default function Workouts() {
   const [sp, setSp] = useSearchParams()
   const range = sp.get('range') || 'm'
   const kind = sp.get('kind') || ''
+  const plan = sp.get('plan') || ''
   const [stats, setStats] = useState<WorkoutStats | null>(null)
   const [list, setList] = useState<Workout[] | null>(null)
   const LIMIT = 300
   const load = () => {
     api.get<WorkoutStats>(`${V1}/workouts/stats?range=${range}`).then(setStats).catch(() => {})
-    api.get<Workout[]>(`${V1}/workouts?range=${range}&from=${rangeFrom(range)}&limit=${LIMIT}${kind ? `&kind=${kind}` : ''}`).then(setList).catch(() => {})
+    // the sessions of one planned workout: all of them, whenever they were
+    api.get<Workout[]>(plan ? `${V1}/workouts?plan_id=${encodeURIComponent(plan)}&limit=${LIMIT}` : `${V1}/workouts?range=${range}&from=${rangeFrom(range)}&limit=${LIMIT}${kind ? `&kind=${kind}` : ''}`).then(setList).catch(() => {})
   }
-  useEffect(() => { load() }, [range, kind]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [range, kind, plan]) // eslint-disable-line react-hooks/exhaustive-deps
   useOnChange(load)
   if (!stats || !list) return <Loading />
   const shown = kind ? stats.by_kind.filter(k => k.kind === kind) : stats.by_kind
@@ -54,6 +61,7 @@ export default function Workouts() {
         actions={<><div className="scroll-x"><Segmented size="sm" value={range} onChange={v => setSp({ range: v, ...(kind ? { kind } : {}) })} options={RANGES.map(r => ({ value: r.id, label: r.label }))} /></div>
           <button type="button" className="btn primary" onClick={() => openCreate('workout')}><Icon name="plus" size={15} />Add</button></>} />
 
+      {plan && <div className="wo-noroute"><Icon name="target" size={16} /><span className="grow">Sessions of the planned workout <b>{list[0]?.plan_name || plan}</b> · {list.length}</span><button type="button" className="btn ghost sm" onClick={() => setSp({ range })}>Show all</button></div>}
       {stats.by_kind.length > 1 && <div className="wl-kinds scroll-x">
         <button type="button" className={`wl-kind ${!kind ? 'active' : ''}`} onClick={() => setKind('')}>All<span className="tnum">{stats.by_kind.reduce((a, k) => a + k.count, 0)}</span></button>
         {stats.by_kind.map(k => <button key={k.kind} type="button" className={`wl-kind ${kind === k.kind ? 'active' : ''}`} style={{ '--tile': kindColor(k.kind) } as React.CSSProperties} onClick={() => setKind(kind === k.kind ? '' : k.kind)}>
@@ -185,7 +193,8 @@ export function WorkoutPage() {
               <span>{fmtISOTime(w.start_at)}{w.end_at ? `–${fmtISOTime(w.end_at)}` : ''}</span>
               {place && <span className="row" style={{ gap: 4 }}><Icon name="pin" size={13} />{place}</span>}
             </div>
-            {(w.device || temp !== null) && <div className="wo-tags">
+            {(w.device || temp !== null || w.plan_name) && <div className="wo-tags">
+              {w.plan_name && <span className="wo-tag" title={w.plan_id ? `Plan ${w.plan_id}` : undefined}><Icon name="target" size={13} />Planned · <KindName kind={w.kind} />{w.plan_id && <Link to={`/workouts?plan=${encodeURIComponent(w.plan_id)}`} className="muted">&nbsp;· all sessions</Link>}</span>}
               {w.device && <span className="wo-tag"><Icon name="smartphone" size={13} />{w.device}</span>}
               {temp !== null && <span className="wo-tag"><Icon name="thermometer" size={13} />{temp}°{w.humidity !== null ? ` · ${Math.round(w.humidity)}% humidity` : ''}</span>}
             </div>}
@@ -201,7 +210,7 @@ export function WorkoutPage() {
         </section>
         : <div className="wo-noroute"><Icon name="route" size={16} /><span className="grow">{routeNote}{route && !route.connected && <> Connect it under <Link to="/settings/apps">Settings → Connected apps</Link> to get a map for every workout.{!settings?.core_configured && <CoreHint />}</>}</span>{routeActions}</div>}
       {detail && <>
-        <PartsTable title={plannedTitle} sub={planned.some(p => p.kind === 'interval') ? 'The steps of the planned workout, as run' : undefined} parts={planned} kind={w.kind} imperial={imperial} first="Part" />
+        <PartsTable title={plannedTitle} sub={planned.some(p => p.target) ? 'The steps of the planned workout, as run, against their targets' : planned.some(p => p.kind === 'interval') ? 'The steps of the planned workout, as run' : undefined} parts={planned} kind={w.kind} imperial={imperial} first="Part" />
         <PartsTable title="Laps" parts={laps} kind={w.kind} imperial={imperial} first="Lap" />
         <PartsTable title="Splits" sub={`Per ${splitWord}, ${detail.distance_from === 'series' ? 'from the distance the device measured' : 'from the route'}`} parts={detail.splits} kind={w.kind} imperial={imperial} first={detail.split_unit === 'mi' ? 'Mile' : 'Km'} />
       </>}

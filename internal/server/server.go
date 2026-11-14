@@ -307,11 +307,13 @@ func (s *Server) coreStatus() map[string]any {
 
 // publish sends an event for a person (fire and forget, through the outbox).
 func (s *Server) publish(ctx context.Context, uid int64, topic, subject string, payload map[string]any) {
-	if !s.core.Configured() {
-		return
-	}
 	if payload == nil {
 		payload = map[string]any{}
+	}
+	// the person's own webhook and notifier, with or without Core
+	s.deliverLocal(uid, topic, subject, payload)
+	if !s.core.Configured() {
+		return
 	}
 	if u, err := s.store.GetUser(ctx, uid); err == nil {
 		payload["user_email"] = u.Email

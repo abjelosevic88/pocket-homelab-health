@@ -11,7 +11,9 @@ export interface Settings {
   blood_type: string; skin_type: string; wheelchair: boolean
   date_format: string; time_format: string; week_start: number; home_metrics: string[]
   notify_url: string; notify_format: string; notify_goals: boolean; notify_weekly: boolean; notify_meds: boolean; notify_inactive: boolean
-  notify_hour: number; weekly_day: number; notify_configured: boolean
+  notify_hour: number; weekly_day: number; notify_configured: boolean; notify_workouts: boolean
+  webhook_url: string; webhook_secret: string; webhook_events: string[]; webhook_track: boolean; webhook_topics: string[]
+  hr_zones: number[]; max_hr: number; power_zones: number[]; hr_zones_in_effect: number[] | null
   habits_mode: ConnMode; habits_via: ConnVia; habits_detail: string; habits_open_url: string
   habits_url: string; habits_token: string; habits_public_url: string
   movement_mode: ConnMode; movement_via: ConnVia; movement_detail: string; movement_open_url: string
@@ -50,6 +52,7 @@ export interface MetricPage {
 export interface Workout {
   id: number; kind: string; name: string; start_at: string; end_at: string; date: string; duration_s: number; distance_m: number; energy_kcal: number; total_kcal: number
   avg_hr: number; max_hr: number; elevation_m: number; steps: number; temperature: number | null; humidity: number | null; place: string; effort: number | null; effort_estimated: number | null
+  plan_id: string; plan_name: string
   source: string; device: string; external_id: string; notes: string; habit_id: number | null; habit_marked_at: string; habit_error: string; created_at: string; updated_at: string
 }
 export interface WorkoutKindStat { kind: string; name: string; count: number; duration_s: number; distance_m: number; energy_kcal: number }
@@ -104,10 +107,18 @@ export interface Route { connected: boolean; via?: string; detail?: string; poin
 /** A part of a workout (interval, lap, segment, activity, split) with what it took. */
 export interface TrackPart {
   kind: 'lap' | 'segment' | 'interval' | 'activity' | 'split'; label?: string; purpose?: 'warmup' | 'work' | 'recovery' | 'cooldown'; goal?: string; n?: number
+  target?: StepTarget
   start_s: number; end_s: number; duration_s: number; distance_m: number; pace_s_km?: number; speed_ms?: number; hr_avg?: number; hr_max?: number; power_avg?: number; cadence_avg?: number; climb_m: number
 }
+/** A planned step's target beside what was done: actual is the step's average (speed in m/s);
+ *  the percentages are the share of the step's time below, inside and above the range. */
+export interface StepTarget {
+  type: 'heart_rate' | 'heart_rate_zone' | 'speed' | 'cadence' | 'power' | 'power_zone'; min?: number; max?: number; zone?: number; metric: 'current' | 'average'
+  range_min?: number; range_max?: number; zones_from?: 'settings' | 'estimated'; actual: number; status: '' | 'in' | 'below' | 'above'
+  in_pct: number; below_pct: number; above_pct: number; covered_s: number
+}
 /** GET /workouts/{id}/track: series as [seconds, value] by key, the parts and the splits. */
-export interface WorkoutTrack { route: [number, number, number, number][]; series: Record<string, [number, number][]>; segments: TrackPart[]; splits: TrackPart[]; split_unit: 'km' | 'mi'; distance_from: '' | 'series' | 'route'; updated_at?: string }
+export interface WorkoutTrack { route: [number, number, number, number][]; series: Record<string, [number, number][]>; segments: TrackPart[]; splits: TrackPart[]; split_unit: 'km' | 'mi'; distance_from: '' | 'series' | 'route'; series_step: number; recorded_step: number; updated_at?: string }
 
 /** An ECG from the watch; `voltages` (µV at sampling_hz) only on GET /ecgs/{id}. */
 export interface ECG { id: number; at: string; date: string; duration_s: number; classification: string; avg_hr: number; symptoms_status: string; sampling_hz: number; voltages?: number[]; source: string; device: string }

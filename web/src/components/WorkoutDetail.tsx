@@ -4,7 +4,7 @@
 import { LineChart } from './Chart'
 import { Icon } from './icons'
 import { clock, thin } from '../lib/track'
-import type { TrackPart, WorkoutTrack } from '../lib/types'
+import type { StepTarget, TrackPart, WorkoutTrack } from '../lib/types'
 import { fmtDistance, fmtPace } from '../lib/units'
 
 const PACED = new Set(['running', 'walking', 'hiking'])
@@ -79,6 +79,45 @@ export function SeriesCharts({ track, kind, imperial }: { track: WorkoutTrack; k
   })}</>
 }
 
+/** A value in a target's units: a pace or speed, bpm, W, per minute. */
+function targetValue(t: StepTarget, v: number, kind: string, imperial: boolean): string {
+  if (t.type === 'speed') return speedText(kind, v, imperial)
+  return String(Math.round(v))
+}
+
+/** "4:45–5:05/km", "Zone 2 · 120–140", "≥ 250 W". A pace range runs from the slower end. */
+function targetText(t: StepTarget, kind: string, imperial: boolean): string {
+  const unit = t.type.startsWith('heart_rate') ? ' bpm' : t.type.startsWith('power') ? ' W' : t.type === 'cadence' ? '/min' : ''
+  const lo = t.range_min, hi = t.range_max
+  const v = (x: number) => targetValue(t, x, kind, imperial)
+  const paced = t.type === 'speed' && PACED.has(kind)
+  let range = ''
+  if (lo && hi) range = paced ? `${v(hi).replace(/\/.*$/, '')}–${v(lo)}` : `${v(lo)}–${v(hi)}${unit}`
+  else if (lo) range = paced ? `≤ ${v(lo)}` : `≥ ${v(lo)}${unit}`
+  else if (hi) range = paced ? `≥ ${v(hi)}` : `≤ ${v(hi)}${unit}`
+  const zone = t.zone ? `${t.type === 'power_zone' ? 'Power zone' : 'Zone'} ${t.zone}` : ''
+  return [zone, range].filter(Boolean).join(' · ') + (t.metric === 'average' ? ' avg' : '')
+}
+
+const STATUS: Record<string, { label: string; cls: string }> = { in: { label: 'on target', cls: 'tg-in' }, below: { label: 'below', cls: 'tg-below' }, above: { label: 'above', cls: 'tg-above' } }
+
+/** The target and how the step went against it: the step's average, and a bar of time below, in and above. */
+function TargetCell({ t, kind, imperial }: { t: StepTarget; kind: string; imperial: boolean }) {
+  const st = STATUS[t.status]
+  const paced = t.type === 'speed' && PACED.has(kind)
+  // below = slower on foot (a lower speed), above = faster
+  const left = t.below_pct, right = t.above_pct
+  const tip = t.covered_s ? `${Math.round(t.in_pct)}% of the step in range · ${Math.round(left)}% ${paced ? 'slower' : 'below'} · ${Math.round(right)}% ${paced ? 'faster' : 'above'}${t.zones_from === 'estimated' ? ' · zones estimated from max and resting heart rate (set them in Settings)' : ''}` : undefined
+  return <span className="tg-cell" title={tip}>
+    <span className="tg-goal">{targetText(t, kind, imperial)}</span>
+    {(t.actual > 0 || st) && <span className="tg-did"><span className="tnum">{t.actual ? targetValue(t, t.actual, kind, imperial) : '—'}</span>
+      {st && <span className={`tg-badge ${st.cls}`}>{paced && t.status !== 'in' ? (t.status === 'below' ? 'slower' : 'faster') : st.label}</span>}
+      {t.covered_s > 0 && <span className="tg-bar" aria-hidden="true"><i className="tg-below" style={{ width: `${left}%` }} /><i className="tg-in" style={{ width: `${t.in_pct}%` }} /><i className="tg-above" style={{ width: `${right}%` }} /></span>}
+      {t.covered_s > 0 && <span className="muted small tnum">{Math.round(t.in_pct)}%</span>}
+    </span>}
+  </span>
+}
+
 const PURPOSE: Record<string, string> = { warmup: 'Warm-up', work: 'Work', recovery: 'Recovery', cooldown: 'Cool-down' }
 
 /** Intervals, laps or splits with time, distance, pace and the averages over each.
@@ -86,7 +125,7 @@ const PURPOSE: Record<string, string> = { warmup: 'Warm-up', work: 'Work', recov
 export function PartsTable({ title, sub, parts, kind, imperial, first }: { title: string; sub?: string; parts: TrackPart[]; kind: string; imperial: boolean; first: string }) {
   if (!parts.length) return null
   const has = (k: keyof TrackPart) => parts.some(p => !!p[k])
-  const cols = { goal: has('goal'), dist: has('distance_m'), speed: has('speed_ms'), hr: has('hr_avg'), power: has('power_avg'), cad: has('cadence_avg'), climb: has('climb_m') }
+  const cols = { target: has('target'), goal: has('goal'), dist: has('distance_m'), speed: has('speed_ms'), hr: has('hr_avg'), power: has('power_avg'), cad: has('cadence_avg'), climb: has('climb_m') }
   // a part of a few metres has no meaningful pace
   const speedOf = (p: TrackPart) => p.distance_m >= 50 && p.speed_ms ? p.speed_ms : 0
   const top = Math.max(...parts.map(speedOf), 0)
@@ -94,13 +133,14 @@ export function PartsTable({ title, sub, parts, kind, imperial, first }: { title
   const barPct = (s: number) => !s || !top ? 0 : top === low ? 100 : 35 + 65 * ((s - low) / (top - low))
   return <section className="card"><div className="card-head"><div className="grow"><h2>{title}</h2>{sub && <p className="muted small">{sub}</p>}</div></div>
     <div className="card-body flush"><table className="table parts"><thead><tr>
-      <th>{first}</th>{cols.goal && <th>Goal</th>}<th className="right">Time</th>{cols.dist && <th className="right">Distance</th>}{cols.speed && <th className="pace-col">{PACED.has(kind) ? 'Pace' : 'Speed'}</th>}
+      <th>{first}</th>{cols.goal && <th>Goal</th>}{cols.target && <th>Target · done</th>}<th className="right">Time</th>{cols.dist && <th className="right">Distance</th>}{cols.speed && <th className="pace-col">{PACED.has(kind) ? 'Pace' : 'Speed'}</th>}
       {cols.hr && <th className="right">Heart rate</th>}{cols.power && <th className="right">Power</th>}{cols.cad && <th className="right">Cadence</th>}{cols.climb && <th className="right">Climb</th>}
     </tr></thead><tbody>{parts.map((p, i) => {
       const s = speedOf(p)
       return <tr key={i} className={p.purpose ? `purpose-${p.purpose}` : ''}>
         <td className="part-name">{p.kind === 'split' ? (p.n && Math.abs(p.distance_m - (imperial ? 1609.344 : 1000)) > 2 ? fmtDistance(p.distance_m) : p.n) : <span className="row" style={{ gap: 8 }}>{p.purpose && <i className="purpose-dot" />}{p.label || PURPOSE[p.purpose || ''] || p.kind}</span>}</td>
         {cols.goal && <td className="muted">{p.goal || ''}</td>}
+        {cols.target && <td>{p.target ? <TargetCell t={p.target} kind={kind} imperial={imperial} /> : ''}</td>}
         <td className="right tnum">{clock(p.duration_s)}</td>
         {cols.dist && <td className="right tnum">{p.distance_m ? fmtDistance(p.distance_m) : '—'}</td>}
         {cols.speed && <td className="pace-col"><span className="pace-cell"><span className="pace-bar"><i style={{ width: `${barPct(s)}%` }} /></span><span className="tnum">{s ? speedText(kind, s, imperial) : '—'}</span></span></td>}

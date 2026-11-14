@@ -142,6 +142,11 @@ function General() {
         <SettingRow title="Skin type" help="Fitzpatrick I (always burns) to VI (never burns)"><Select value={f.skin_type} onChange={v => setF({ ...f, skin_type: v })} options={['I', 'II', 'III', 'IV', 'V', 'VI'].map(v => ({ value: v, label: `Type ${v}` }))} placeholder="Not set" clearLabel="Not set" /></SettingRow>
         <SettingRow title="Wheelchair" help="Apple Health counts pushes instead of steps"><Switch checked={!!f.wheelchair} onChange={v => setF({ ...f, wheelchair: v })} label="Wheelchair" size="sm" /></SettingRow>
       </Section>
+      <Section title="Training zones" icon="heart-pulse" sub="For planned workouts whose steps target a heart rate or power zone: the top of zones 1 to 4, zone 5 is above. Without heart rate zones they are worked out from your max heart rate (else 220 − age) and resting heart rate.">
+        <SettingRow title="Max heart rate" help="bpm; empty = 220 − age"><input type="number" min={0} max={249} value={f.max_hr || ''} onChange={e => setF({ ...f, max_hr: Number(e.target.value) })} className="set-time" /></SettingRow>
+        <SettingRow title="Heart rate zones" help={f.hr_zones?.length ? 'bpm, tops of zones 1–4' : f.hr_zones_in_effect?.length ? `Estimated: ${f.hr_zones_in_effect.join(', ')} bpm` : 'bpm, tops of zones 1–4, e.g. 125, 140, 155, 170'}><ZoneInput value={f.hr_zones || []} onChange={v => setF({ ...f, hr_zones: v })} placeholder={f.hr_zones_in_effect?.join(', ') || '125, 140, 155, 170'} /></SettingRow>
+        <SettingRow title="Power zones" help="W, tops of zones 1–4"><ZoneInput value={f.power_zones || []} onChange={v => setF({ ...f, power_zones: v })} placeholder="150, 200, 240, 280" /></SettingRow>
+      </Section>
       <Section title="Today tiles" icon="grid" sub="Which numbers Today shows first, in this order. Tap to add or remove.">
         <div className="row wrap" style={{ gap: 6 }}>
           {f.home_metrics.map(k => { const m = metricsAll.find(x => x.key === k); return <button key={k} type="button" className="chip active" onClick={() => toggleTile(k)}>{m && <Icon name={m.icon} size={13} />}{m?.name || k}<Icon name="x" size={12} /></button> })}
@@ -252,6 +257,15 @@ function SourcesTab() {
   )
 }
 
+/** Zone tops typed as "125, 140, 155, 170". */
+const parseZones = (t: string) => t.split(/[\s,;]+/).map(Number).filter(n => n > 0)
+function ZoneInput({ value, onChange, placeholder }: { value: number[]; onChange: (v: number[]) => void; placeholder?: string }) {
+  const [text, setText] = useState(value.join(', '))
+  // follow the saved value, but not while typing what parses to it
+  useEffect(() => { if (parseZones(text).join(',') !== value.join(',')) setText(value.join(', ')) }, [value.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
+  return <input value={text} placeholder={placeholder} inputMode="numeric" onChange={e => { setText(e.target.value); onChange(parseZones(e.target.value)) }} />
+}
+
 function Notifications() {
   const { f, setF, save, busy } = useSettingsForm()
   const { toast } = useToast()
@@ -268,6 +282,7 @@ function Notifications() {
         <SettingRow title="Goals" help="One push the moment a daily goal is reached."><Switch checked={f.notify_goals} onChange={v => setF({ ...f, notify_goals: v })} label="Goal reached" /></SettingRow>
         <SettingRow title="Medications" help="A reminder when a dose is due and not yet logged (once per dose)."><Switch checked={f.notify_meds} onChange={v => setF({ ...f, notify_meds: v })} label="Medication reminders" /></SettingRow>
         <SettingRow title="Weekly report" help="Averages vs the week before, workouts, goals."><Switch checked={f.notify_weekly} onChange={v => setF({ ...f, notify_weekly: v })} label="Weekly report" /></SettingRow>
+        <SettingRow title="Workouts" help="A push for every new workout (from the last two days), with its distance, time and heart rate."><Switch checked={!!f.notify_workouts} onChange={v => setF({ ...f, notify_workouts: v })} label="Workout recorded" /></SettingRow>
         <SettingRow title="Phone stopped syncing" help="When nothing has arrived for 36 hours."><Switch checked={f.notify_inactive} onChange={v => setF({ ...f, notify_inactive: v })} label="Sync nudge" /></SettingRow>
         <SettingRow title="Daily pushes at" help="Hour of the day, server time."><input type="number" min={0} max={23} value={f.notify_hour} onChange={e => setF({ ...f, notify_hour: Number(e.target.value) })} className="set-time" /></SettingRow>
         <SettingRow title="Weekly report on"><Select value={String(f.weekly_day)} onChange={v => setF({ ...f, weekly_day: Number(v) })} options={DAYS.map(([d, l]) => ({ value: String(d), label: String(l) }))} /></SettingRow>
@@ -277,6 +292,21 @@ function Notifications() {
         <button type="button" className="btn" onClick={() => run('notify', f.notify_url, '', { format: f.notify_format })} disabled={!f.notify_url}><Icon name="mail" size={15} />Send a test</button>
         <button type="button" className="btn" onClick={weekly}><Icon name="chart" size={15} />Send the weekly report now</button>
         {status('notify')}
+      </div>
+      <Section title="Webhook" icon="link" actions={<span className={`badge ${f.webhook_url && f.webhook_events?.length ? 'ok' : ''}`}>{f.webhook_url && f.webhook_events?.length ? 'on' : 'off'}</span>}
+        sub={<>The events you pick are POSTed as JSON to your own address — no Pocket Core needed: <code>{'{"event", "subject", "sent_at", "url", "data"}'}</code>. With a secret, <code>X-Pocket-Signature: sha256=…</code> is the HMAC-SHA256 of the body. Workouts from the last 7 days only, so an Apple Health import does not flood it.</>}>
+        <SettingRow title="URL" stack><input value={f.webhook_url || ''} onChange={e => setF({ ...f, webhook_url: e.target.value })} placeholder="https://example.org/hooks/health" /></SettingRow>
+        <SettingRow title="Secret" help="Optional. Stored on the server; shown masked."><input value={f.webhook_secret || ''} onChange={e => setF({ ...f, webhook_secret: e.target.value })} autoComplete="off" /></SettingRow>
+        <SettingRow title="Events" stack><div className="row wrap" style={{ gap: 6 }}>{(f.webhook_topics || []).map(t => {
+          const on = (f.webhook_events || []).includes(t)
+          return <button key={t} type="button" className={`chip ${on ? 'active' : ''}`} onClick={() => setF({ ...f, webhook_events: on ? f.webhook_events.filter(x => x !== t) : [...(f.webhook_events || []), t] })}>{t.replace('health.', '').replace(/_/g, ' ')}</button>
+        })}</div></SettingRow>
+        <SettingRow title="Workout detail" help="health.workout_recorded carries the track too: every series at the recorded rate, the steps with their targets and what was done, the splits (never the route)."><Switch checked={!!f.webhook_track} onChange={v => setF({ ...f, webhook_track: v })} label="Include the track" /></SettingRow>
+      </Section>
+      <div className="row wrap">
+        <button type="button" className="btn primary" onClick={() => save()} disabled={busy}>Save changes</button>
+        <button type="button" className="btn" onClick={() => run('webhook', '', '')} disabled={!f.webhook_url}><Icon name="link" size={15} />Send a test event</button>
+        {status('webhook')}
       </div>
     </div>
   )
