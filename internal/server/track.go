@@ -132,8 +132,10 @@ func buildTrack(t *store.WorkoutTrack, unit string, step float64, z zones) track
 	sort.SliceStable(segs, func(i, j int) bool { return segs[i].StartS < segs[j].StartS })
 	for _, sg := range segs {
 		p := a.part(sg, sg.StartS, sg.EndS)
-		if sg.Target != nil {
-			p.Target = a.target(*sg.Target, p, z)
+		// targets stored before a fix in Normalize read as fixed
+		if t := sg.Target.Normalize(); t != nil {
+			p.WorkoutSegment.Target = t
+			p.Target = a.target(*t, p, z)
 		}
 		tv.Segments = append(tv.Segments, p)
 	}

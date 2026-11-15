@@ -170,6 +170,15 @@ func (t *StepTarget) Normalize() *StepTarget {
 			c.Max = &v
 		}
 	}
+	// App build 1415 sent heart rate and cadence 3600 times too high (WorkoutKit's
+	// per-minute unit read as hertz): no heart rate or cadence reaches 1000 a minute.
+	if c.Type == "heart_rate" || c.Type == "cadence" {
+		for _, p := range []*float64{c.Min, c.Max} {
+			if p != nil && *p >= 1000 {
+				*p = math.Round(*p/3600*10) / 10
+			}
+		}
+	}
 	if c.Min != nil && c.Max != nil && *c.Min > *c.Max {
 		c.Min, c.Max = c.Max, c.Min
 	}

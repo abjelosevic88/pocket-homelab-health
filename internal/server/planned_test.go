@@ -173,3 +173,35 @@ func TestWorkoutWebhook(t *testing.T) {
 		t.Fatalf("test event = %q", h.event)
 	}
 }
+
+// App build 1415 sent heart rate and cadence targets 3600 times too high; both
+// new copies and ones already stored read as per minute.
+func TestHeartRateTargetPerSecondFixed(t *testing.T) {
+	a := newApp(t, nil)
+	start := time.Now().Add(-time.Hour).UTC().Truncate(time.Second)
+	hr := [][2]float64{}
+	for s := 0; s < 120; s++ {
+		hr = append(hr, [2]float64{float64(s) + 0.5, 135})
+	}
+	w := map[string]any{"name": "Running", "plan_name": "Tempo", "start": start.Format(time.RFC3339), "end": start.Add(2 * time.Minute).Format(time.RFC3339),
+		"series": map[string]any{"heart_rate": hr},
+		"segments": []map[string]any{
+			{"kind": "interval", "purpose": "work", "start_s": 0, "end_s": 60, "target": map[string]any{"type": "heart_rate", "min": 432000, "max": 540000}},
+			{"kind": "interval", "purpose": "work", "start_s": 60, "end_s": 120, "target": map[string]any{"type": "cadence", "min": 612000}}}}
+	a.ok(a.alice, "POST", "/api/v1/ingest", map[string]any{"workouts": []any{w}})
+	_, _, list := a.call(a.alice, "GET", "/api/v1/workouts", nil)
+	id := int64(num(list[0].(map[string]any), "id"))
+	// as stored by 0.6.0, before the fix on the way in
+	if _, err := a.st.DB.Exec(`UPDATE workout_tracks SET segments = json_set(segments, '$[0].target.min', 432000, '$[0].target.max', 540000) WHERE workout_id = ?`, id); err != nil {
+		t.Fatal(err)
+	}
+	tr := a.ok(a.alice, "GET", fmt.Sprintf("/api/v1/workouts/%d/track", id), nil)
+	hrT := tr["segments"].([]any)[0].(map[string]any)["target"].(map[string]any)
+	cadT := tr["segments"].([]any)[1].(map[string]any)["target"].(map[string]any)
+	if num(hrT, "min") != 120 || num(hrT, "max") != 150 || num(hrT, "range_min") != 120 || hrT["status"] != "in" || num(hrT, "in_pct") != 100 {
+		t.Fatalf("heart rate target = %v", hrT)
+	}
+	if num(cadT, "min") != 170 {
+		t.Fatalf("cadence target = %v", cadT)
+	}
+}
