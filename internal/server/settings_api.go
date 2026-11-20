@@ -517,25 +517,39 @@ func (s *Server) handleExportCSV(w http.ResponseWriter, r *http.Request) {
 	cw.Flush()
 }
 
-// handleImportJSON merges an export into the caller's own data.
+// handleImportJSON merges an export into the caller's own data. It only
+// adds: samples, workouts and nights are matched by when and where from,
+// medicines by name, doses by medicine and time (or slot), symptoms by name
+// and time, goals by metric (a goal already set stays), rules by what they
+// do, so the same file twice adds nothing. The counts are what was added.
 func (s *Server) handleImportJSON(w http.ResponseWriter, r *http.Request) {
 	var doc exportDoc
 	if err := decode(r, &doc); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
 	}
+	if doc.App != "" && doc.App != "pocket-health" {
+		writeErr(w, http.StatusBadRequest, "this is not a Pocket Health export")
+		return
+	}
 	ctx := r.Context()
 	uid := actorID(ctx)
-	counts := map[string]int{}
+	counts := map[string]int{"samples": 0, "workouts": 0, "sleep": 0, "goals": 0, "medications": 0, "doses": 0, "symptoms": 0, "rules": 0}
 	for i := range doc.Samples {
 		doc.Samples[i].ID = 0
 	}
-	n, touched, err := s.store.UpsertSamples(ctx, uid, doc.Samples)
+	countSamples := func() int {
+		var n int
+		_ = s.store.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM samples WHERE user_id = ?`, uid).Scan(&n)
+		return n
+	}
+	before := countSamples()
+	_, touched, err := s.store.UpsertSamples(ctx, uid, doc.Samples)
 	if err != nil {
 		s.fail(w, err, "import")
 		return
 	}
-	counts["samples"] = n
+	counts["samples"] = countSamples() - before
 	st, _ := s.store.GetSettings(ctx, uid)
 	if err := s.store.Rollup(ctx, uid, touched, st.PreferDevice); err != nil {
 		s.fail(w, err, "import")
@@ -545,44 +559,106 @@ func (s *Server) handleImportJSON(w http.ResponseWriter, r *http.Request) {
 		doc.Workouts[i].ID = 0
 		doc.Workouts[i].HabitMarkedAt = store.Now() // never re-tick habits for imported rows
 	}
-	counts["workouts"], _, _ = s.store.UpsertWorkouts(ctx, uid, doc.Workouts)
+	_, fresh, _ := s.store.UpsertWorkouts(ctx, uid, doc.Workouts)
+	counts["workouts"] = len(fresh)
 	for i := range doc.Sleep {
 		doc.Sleep[i].ID = 0
 	}
-	counts["sleep"], _, _ = s.store.UpsertSleep(ctx, uid, doc.Sleep)
+	_, fresh, _ = s.store.UpsertSleep(ctx, uid, doc.Sleep)
+	counts["sleep"] = len(fresh)
 	for i := range doc.Goals {
 		g := doc.Goals[i]
+		if _, err := s.store.GetGoal(ctx, uid, g.Metric); err == nil {
+			continue
+		}
 		if err := s.store.UpsertGoal(ctx, uid, &g); err == nil {
 			counts["goals"]++
 		}
 	}
+	haveMeds, _ := s.store.ListMedications(ctx, uid, true)
+	medByName := map[string]int64{}
+	for _, m := range haveMeds {
+		medByName[strings.ToLower(strings.TrimSpace(m.Name))] = m.ID
+	}
 	medIDs := map[int64]int64{}
+	stock := map[int64]int{} // new medicines keep the stock they had, whatever their doses say
 	for _, m := range doc.Medications {
-		old := m.ID
+		old, key := m.ID, strings.ToLower(strings.TrimSpace(m.Name))
+		if id, ok := medByName[key]; ok {
+			medIDs[old] = id
+			continue
+		}
 		m.ID = 0
 		if err := s.store.CreateMedication(ctx, uid, &m); err == nil {
 			medIDs[old] = m.ID
+			medByName[key] = m.ID
+			stock[m.ID] = m.Stock
 			counts["medications"]++
 		}
 	}
+	doseKey := func(l store.MedLog) string {
+		if l.Slot != "" {
+			return fmt.Sprintf("%d|%s|%s", l.MedicationID, l.Date, l.Slot)
+		}
+		return fmt.Sprintf("%d|%s", l.MedicationID, l.TakenAt)
+	}
+	haveDoses := map[string]bool{}
+	if logs, err := s.store.MedLogs(ctx, uid, "0000-01-01", "9999-12-31"); err == nil {
+		for _, l := range logs {
+			haveDoses[doseKey(l)] = true
+		}
+	}
 	for _, l := range doc.MedLog {
-		if nid, ok := medIDs[l.MedicationID]; ok {
-			l.MedicationID = nid
-			l.ID = 0
-			if err := s.store.LogDose(ctx, uid, &l); err == nil {
-				counts["doses"]++
-			}
+		nid, ok := medIDs[l.MedicationID]
+		if !ok {
+			continue
+		}
+		l.MedicationID, l.ID = nid, 0
+		if l.Date == "" && l.TakenAt != "" {
+			l.Date = store.DateOf(l.TakenAt)
+		}
+		if haveDoses[doseKey(l)] {
+			continue
+		}
+		if err := s.store.LogDose(ctx, uid, &l); err == nil {
+			haveDoses[doseKey(l)] = true
+			counts["doses"]++
+		}
+	}
+	for id, n := range stock {
+		_, _ = s.store.DB.ExecContext(ctx, `UPDATE medications SET stock = ? WHERE id = ? AND user_id = ?`, n, id, uid)
+	}
+	haveSym := map[string]bool{}
+	if xs, err := s.store.ListSymptoms(ctx, uid, "", "", 0); err == nil {
+		for _, x := range xs {
+			haveSym[strings.ToLower(x.Name)+"|"+x.At] = true
 		}
 	}
 	for _, x := range doc.Symptoms {
+		key := strings.ToLower(x.Name) + "|" + x.At
+		if haveSym[key] {
+			continue
+		}
 		x.ID = 0
 		if err := s.store.CreateSymptom(ctx, uid, &x); err == nil {
+			haveSym[key] = true
 			counts["symptoms"]++
 		}
 	}
+	haveRules := map[string]bool{}
+	ruleKey := func(ru store.HabitRule) string { return fmt.Sprintf("%s|%s|%d", ru.Trigger, ru.Match, ru.HabitID) }
+	if rs, err := s.store.ListRules(ctx, uid); err == nil {
+		for _, ru := range rs {
+			haveRules[ruleKey(ru)] = true
+		}
+	}
 	for _, ru := range doc.Rules {
+		if haveRules[ruleKey(ru)] {
+			continue
+		}
 		ru.ID = 0
 		if err := s.store.CreateRule(ctx, uid, &ru); err == nil {
+			haveRules[ruleKey(ru)] = true
 			counts["rules"]++
 		}
 	}

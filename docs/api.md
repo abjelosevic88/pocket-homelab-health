@@ -48,7 +48,7 @@ Workout extras:
 
 - `POST /import/apple` — multipart `file` = Apple Health `export.zip` or `export.xml`, optional `since` (date). Returns `202` with a job; poll `GET /imports/{id}` (`status` running/done/error, `progress`, counts).
 - `POST /import/csv?metric=weight&source=scale` — CSV body or multipart `file`; columns `date,value[,unit][,note]` or `date,metric,value[,unit]` (header optional).
-- `POST /import` — a JSON export (below) merged into the caller's data.
+- `POST /import` — a JSON export (below) merged into the caller's data. It only adds what is not there yet (a goal you already set stays), so the same file twice adds nothing; the answer counts what was added.
 - `GET /sources` — last write per source, devices seen, recent imports. `DELETE /sources/{source}` removes everything a source sent. `POST /rollup` recomputes every day.
 
 ## Reading
@@ -71,6 +71,7 @@ Workout extras:
 - `GET /weather?from&to`, `POST /weather/refresh`, `GET /weather/geocode?q=`.
 - `POST /ai/recap {"range"}`, `POST /ai/ask {"question","range"}`, `GET /ai/status`, `GET /ai/models`.
 - `GET /export.json`, `GET /export.csv` (one row per day, one column per metric), `GET /backup` (admin).
+- `GET /pocket/portable` — Pocket Move can copy your health data out and bring it in (the exports above, `POST /import` and `POST /import/apple`), under the link scopes `move:export` and `move:import`.
 
 ## Webhook (no Pocket Core needed)
 
