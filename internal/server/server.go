@@ -258,10 +258,12 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		Description: "Your health data at home: steps, workouts, sleep, heart, weight, vitals and nutrition from the phone (Health Auto Export, Apple Health export, any app), goals with streaks, medications with reminders, symptoms, insights with weather, and a weekly recap.",
 		Icon:        "/favicon.svg", Version: Version,
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "HEALTH",
-		Publishes: eventTopics,
-		Offers:    linkOffers,
-		Portable:  portable,
-		Uses:      append(linkUses(), core.InferenceUse()),
+		Publishes:    eventTopics,
+		Offers:       linkOffers,
+		Portable:     portable,
+		Category:     "Health",
+		Capabilities: capabilities,
+		Uses:         append(linkUses(), core.InferenceUse()),
 	}
 	if s.cfg.BaseURL != "" {
 		m.OIDC = &core.OIDCRequest{RedirectURIs: []string{s.oidcCallbackURL()}}

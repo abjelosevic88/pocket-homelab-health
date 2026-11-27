@@ -407,3 +407,68 @@ func (s *Store) WorkoutDays(ctx context.Context, uid int64, from, to string) (ma
 	}
 	return out, rows.Err()
 }
+
+// likeArg is a LIKE pattern that finds q anywhere, with %, _ and \ taken as
+// they are (use with ESCAPE '\').
+func likeArg(q string) string {
+	return "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(q) + "%"
+}
+
+// SearchWorkouts finds a person's workouts by words in their name, plan,
+// place or notes, or by their kind (the keys given, whose names have the
+// words), newest first.
+func (s *Store) SearchWorkouts(ctx context.Context, uid int64, q string, kinds []string, limit int) ([]Workout, error) {
+	like := likeArg(q)
+	where := `(name LIKE ? ESCAPE '\' OR plan_name LIKE ? ESCAPE '\' OR place LIKE ? ESCAPE '\' OR notes LIKE ? ESCAPE '\' OR kind LIKE ? ESCAPE '\'`
+	args := []any{uid, like, like, like, like, like}
+	if len(kinds) > 0 {
+		where += ` OR kind IN (` + strings.TrimSuffix(strings.Repeat("?,", len(kinds)), ",") + `)`
+		for _, k := range kinds {
+			args = append(args, k)
+		}
+	}
+	args = append(args, limit)
+	rows, err := s.DB.QueryContext(ctx, `SELECT `+workoutCols+` FROM workouts WHERE user_id = ? AND `+where+`) ORDER BY start_at DESC LIMIT ?`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Workout{}
+	for rows.Next() {
+		w, err := scanWorkout(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}
+
+// WorkoutPlan is a planned workout the person ran, with how often and when last.
+type WorkoutPlan struct {
+	ID       string
+	Name     string
+	Sessions int
+	Last     string // date of the latest session
+}
+
+// SearchPlans finds the planned workouts a person ran whose name has the
+// words, the one run last first.
+func (s *Store) SearchPlans(ctx context.Context, uid int64, q string, limit int) ([]WorkoutPlan, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT plan_id, plan_name, COUNT(1), MAX(date) FROM workouts
+		WHERE user_id = ? AND plan_name != '' AND plan_name LIKE ? ESCAPE '\'
+		GROUP BY plan_id, plan_name ORDER BY MAX(date) DESC LIMIT ?`, uid, likeArg(q), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []WorkoutPlan{}
+	for rows.Next() {
+		var p WorkoutPlan
+		if err := rows.Scan(&p.ID, &p.Name, &p.Sessions, &p.Last); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}

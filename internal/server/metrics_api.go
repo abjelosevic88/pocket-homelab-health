@@ -645,6 +645,20 @@ func (s *Server) handleDay(w http.ResponseWriter, r *http.Request) {
 		m := metrics.Get(k)
 		numbers[k] = map[string]any{"value": metrics.Round(m, p.Value), "value2": p.Value2, "unit": m.Unit, "name": m.Name}
 	}
+	// medications and symptoms are private: only in the owner's own UI, never for links
+	var meds []store.Medication
+	var symptoms []store.Symptom
+	if linkApp(ctx) == "" {
+		meds, _ = s.store.MedsForDay(ctx, uid, date)
+		symptoms, _ = s.store.ListSymptoms(ctx, uid, date, date, 50)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"date": date, "metrics": numbers, "workouts": workouts, "sleep": nights, "goals_met": met,
+		"summary": daySummary(vals, workouts, false), "medications": meds, "symptoms": symptoms})
+}
+
+// daySummary is a day in one line: "9123 steps · slept 6h 48m · running 35
+// min · resting HR 52 · 80.0 kg" (the weight in pounds for imperial).
+func daySummary(vals map[string]store.DailyPoint, workouts []store.Workout, imperial bool) string {
 	var parts []string
 	if p, ok := vals["steps"]; ok {
 		parts = append(parts, fmt.Sprintf("%d steps", int(p.Value)))
@@ -659,17 +673,13 @@ func (s *Server) handleDay(w http.ResponseWriter, r *http.Request) {
 		parts = append(parts, fmt.Sprintf("resting HR %d", int(p.Value)))
 	}
 	if p, ok := vals["weight"]; ok {
-		parts = append(parts, fmt.Sprintf("%.1f kg", p.Value))
+		if imperial {
+			parts = append(parts, fmt.Sprintf("%.1f lb", p.Value/0.45359237))
+		} else {
+			parts = append(parts, fmt.Sprintf("%.1f kg", p.Value))
+		}
 	}
-	// medications and symptoms are private: only in the owner's own UI, never for links
-	var meds []store.Medication
-	var symptoms []store.Symptom
-	if linkApp(ctx) == "" {
-		meds, _ = s.store.MedsForDay(ctx, uid, date)
-		symptoms, _ = s.store.ListSymptoms(ctx, uid, date, date, 50)
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"date": date, "metrics": numbers, "workouts": workouts, "sleep": nights, "goals_met": met,
-		"summary": strings.Join(parts, " · "), "medications": meds, "symptoms": symptoms})
+	return strings.Join(parts, " · ")
 }
 
 // handleOverlay lists dated items for Pocket Calendar: workouts as timed
